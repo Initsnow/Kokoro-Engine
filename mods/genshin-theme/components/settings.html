@@ -414,6 +414,7 @@
             border-radius: 6px;
             padding: 10px;
             margin-bottom: 8px;
+            overflow: hidden;
         }
 
         .list-item-header {
@@ -421,14 +422,6 @@
             justify-content: space-between;
             align-items: center;
             gap: 8px;
-        }
-
-        .list-item-header > span:first-child {
-            flex: 1;
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
 
         .list-item-title {
@@ -1820,16 +1813,15 @@
                             // Display mode
                             const header = document.createElement('div');
                             header.className = 'list-item-header';
+                            header.style.cssText = 'display:flex;align-items:center;gap:6px;width:100%;min-width:0';
 
                             const contentSpan = document.createElement('span');
+                            contentSpan.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px';
                             contentSpan.textContent = (mem.content || '').substring(0, 50) + (mem.content && mem.content.length > 50 ? '...' : '');
                             header.appendChild(contentSpan);
 
                             const btnGroup = document.createElement('div');
-                            btnGroup.style.display = 'flex';
-                            btnGroup.style.gap = '4px';
-                            btnGroup.style.alignItems = 'center';
-                            btnGroup.style.flexShrink = '0';
+                            btnGroup.style.cssText = 'display:flex;gap:4px;align-items:center;flex-shrink:0';
 
                             const timeSpan = document.createElement('span');
                             timeSpan.style.fontSize = '10px';
