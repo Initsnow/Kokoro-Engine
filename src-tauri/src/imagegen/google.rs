@@ -4,6 +4,32 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::json;
 
+fn parse_aspect_ratio(size: &str) -> &'static str {
+    match size {
+        "1:1" => "1:1",
+        "16:9" => "16:9",
+        "9:16" => "9:16",
+        "4:3" => "4:3",
+        "3:4" => "3:4",
+        other => {
+            let parts: Vec<&str> = other.split('x').collect();
+            if parts.len() == 2 {
+                if let (Ok(w), Ok(h)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>()) {
+                    if h > 0.0 {
+                        let r = w / h;
+                        return if r > 1.6 { "16:9" }
+                               else if r > 1.2 { "4:3" }
+                               else if r < 0.625 { "9:16" }
+                               else if r < 0.85 { "3:4" }
+                               else { "1:1" };
+                    }
+                }
+            }
+            "1:1"
+        }
+    }
+}
+
 pub struct GoogleImageGenProvider {
     id: String,
     api_key: String,
@@ -54,14 +80,7 @@ impl ImageGenProvider for GoogleImageGenProvider {
         );
 
         // Aspect ratio mapping
-        let aspect_ratio = match params.size.as_deref() {
-            Some("1024x1024") => "1:1",
-            Some("16:9") => "16:9",
-            Some("9:16") => "9:16",
-            Some("3:4") => "3:4",
-            Some("4:3") => "4:3",
-            _ => "1:1", // Default
-        };
+        let aspect_ratio = parse_aspect_ratio(params.size.as_deref().unwrap_or(""));
 
         let body = json!({
             "prompt": params.prompt,

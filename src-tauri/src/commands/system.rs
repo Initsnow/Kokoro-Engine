@@ -1,4 +1,39 @@
 use serde::Serialize;
+use std::sync::Arc;
+use tauri::{command, State};
+use tokio::sync::RwLock;
+
+#[derive(Clone)]
+pub struct WindowSizeState {
+    pub width: Arc<RwLock<u32>>,
+    pub height: Arc<RwLock<u32>>,
+}
+
+impl WindowSizeState {
+    pub fn new() -> Self {
+        Self {
+            width: Arc::new(RwLock::new(800)),
+            height: Arc::new(RwLock::new(600)),
+        }
+    }
+    pub async fn get(&self) -> (u32, u32) {
+        (*self.width.read().await, *self.height.read().await)
+    }
+    pub async fn set(&self, w: u32, h: u32) {
+        *self.width.write().await = w;
+        *self.height.write().await = h;
+    }
+}
+
+#[command]
+pub async fn set_window_size(
+    state: State<'_, WindowSizeState>,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    state.set(width, height).await;
+    Ok(())
+}
 
 #[derive(Serialize)]
 pub struct EngineInfo {

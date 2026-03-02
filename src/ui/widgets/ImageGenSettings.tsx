@@ -280,13 +280,50 @@ export default function ImageGenSettings({ config, onChange }: ImageGenSettingsP
                                         {/* Size */}
                                         <div>
                                             <label className={labelClasses}>{t("settings.image_gen.fields.size")}</label>
-                                            <input
-                                                type="text"
-                                                value={provider.size || ""}
-                                                onChange={e => updateProvider(index, { size: e.target.value })}
-                                                placeholder="1024x1024"
-                                                className={clsx(inputClasses, "font-mono text-xs")}
-                                            />
+                                            {(provider.provider_type === "stable_diffusion" || provider.provider_type === "google") ? (() => {
+                                                const SD_PRESETS = ["auto", "512x512", "768x768", "1024x1024", "1280x720", "1920x1080"];
+                                                const GOOGLE_PRESETS = ["auto", "1:1", "16:9", "9:16", "4:3", "3:4"];
+                                                const presets = provider.provider_type === "google" ? GOOGLE_PRESETS : SD_PRESETS;
+                                                const isCustom = !!provider.size && !presets.includes(provider.size);
+                                                const selectValue = isCustom ? "custom" : (provider.size || "auto");
+                                                return (
+                                                    <div className="space-y-2">
+                                                        <select
+                                                            value={selectValue}
+                                                            onChange={e => {
+                                                                if (e.target.value !== "custom") {
+                                                                    updateProvider(index, { size: e.target.value });
+                                                                }
+                                                            }}
+                                                            className={clsx(inputClasses, "font-mono text-xs appearance-none cursor-pointer")}
+                                                        >
+                                                            {presets.map(p => (
+                                                                <option key={p} value={p}>
+                                                                    {p === "auto" ? t("settings.image_gen.fields.size_auto") : p}
+                                                                </option>
+                                                            ))}
+                                                            <option value="custom">{t("settings.image_gen.fields.size_custom")}</option>
+                                                        </select>
+                                                        {isCustom && (
+                                                            <input
+                                                                type="text"
+                                                                value={provider.size || ""}
+                                                                onChange={e => updateProvider(index, { size: e.target.value })}
+                                                                placeholder="1024x1024"
+                                                                className={clsx(inputClasses, "font-mono text-xs")}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                );
+                                            })() : (
+                                                <input
+                                                    type="text"
+                                                    value={provider.size || ""}
+                                                    onChange={e => updateProvider(index, { size: e.target.value })}
+                                                    placeholder="1024x1024"
+                                                    className={clsx(inputClasses, "font-mono text-xs")}
+                                                />
+                                            )}
                                         </div>
 
                                         {/* Test Connection (SD only) */}

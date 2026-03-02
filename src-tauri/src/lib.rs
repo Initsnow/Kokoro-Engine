@@ -32,6 +32,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::system::get_engine_info,
             commands::system::get_system_status,
+            commands::system::set_window_size,
             commands::character::get_character_state,
             commands::character::set_expression,
             commands::character::send_message,
@@ -196,6 +197,9 @@ pub fn run() {
                 crate::imagegen::ImageGenService::init_from_config(&imagegen_config).await
             });
             app.manage(imagegen_service);
+
+            // WindowSizeState
+            app.manage(crate::commands::system::WindowSizeState::new());
 
             // LLM
             let llm_config_path = app_data.join("llm_config.json");

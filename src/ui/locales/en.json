@@ -292,7 +292,9 @@
                 "fetching": "Fetching...",
                 "select_checkpoint": "Select checkpoint...",
                 "checkpoint_placeholder": "Optional checkpoint",
-                "size": "Image Size"
+                "size": "Image Size",
+                "size_auto": "Auto (window size)",
+                "size_custom": "Custom..."
             },
             "test": {
                 "button": "Test Connection",

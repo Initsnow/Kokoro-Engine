@@ -1,5 +1,6 @@
 use crate::ai::context::AIOrchestrator;
 use crate::ai::memory_extractor;
+use crate::commands::system::WindowSizeState;
 use crate::imagegen::ImageGenService;
 use crate::llm::service::LlmService;
 use futures::StreamExt;
@@ -207,10 +208,11 @@ pub async fn stream_chat(
     window: Window,
     request: ChatRequest,
     state: State<'_, AIOrchestrator>,
-    _imagegen_state: State<'_, ImageGenService>,
+    imagegen_state: State<'_, ImageGenService>,
     llm_state: State<'_, LlmService>,
     _action_registry: State<'_, std::sync::Arc<RwLock<crate::actions::ActionRegistry>>>,
     _vision_watcher: State<'_, crate::vision::watcher::VisionWatcher>,
+    window_size_state: State<'_, WindowSizeState>,
     vision_server: State<
         '_,
         std::sync::Arc<tokio::sync::Mutex<crate::vision::server::VisionServer>>,
@@ -468,6 +470,7 @@ pub async fn stream_chat(
     let chat_provider = llm_state.provider().await;
     let mut all_cleaned_text = String::new();
     let mut all_translations = Vec::new();
+    let mut bg_generated_by_tool = false;
 
     for round in 0..MAX_TOOL_ROUNDS {
         println!("[Chat] Tool loop round {}", round + 1);
@@ -547,6 +550,9 @@ pub async fn stream_chat(
 
         for tc in &tool_calls {
             println!("[ToolCall] Executing: {} with args {:?}", tc.name, tc.args);
+            if tc.name == "set_background" {
+                bg_generated_by_tool = true;
+            }
             if registry.needs_feedback(&tc.name) {
                 any_needs_feedback = true;
             }
@@ -666,6 +672,84 @@ pub async fn stream_chat(
                     eprintln!("[Memory] Consolidation failed: {}", e);
                 }
                 _ => {}
+            }
+        });
+    }
+
+    // Background image generation: analyze reply and optionally generate a scene image
+    // Skip if the main LLM already triggered set_background via tool call
+    if request.allow_image_gen.unwrap_or(false) && !full_response.is_empty() && !bg_generated_by_tool {
+        let imagegen_svc = imagegen_state.inner().clone();
+        let system_provider = llm_state.system_provider().await;
+        let reply_for_analysis = full_response.clone();
+        let window_for_img = window.clone();
+        let window_size = window_size_state.get().await;
+
+        tauri::async_runtime::spawn(async move {
+            let analyze_messages = vec![
+                crate::llm::openai::Message {
+                    role: "system".to_string(),
+                    content: crate::llm::openai::MessageContent::Text(
+                        crate::ai::prompts::BG_IMAGE_ANALYZER_PROMPT.to_string(),
+                    ),
+                },
+                crate::llm::openai::Message {
+                    role: "user".to_string(),
+                    content: crate::llm::openai::MessageContent::Text(
+                        format!("Character reply: {}", reply_for_analysis)
+                    ),
+                },
+            ];
+
+            let json_str = match system_provider.chat(analyze_messages, None).await {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("[ImageGen] BG analyzer LLM failed: {}", e);
+                    return;
+                }
+            };
+
+            let clean = json_str
+                .trim()
+                .trim_start_matches("```json")
+                .trim_start_matches("```")
+                .trim_end_matches("```");
+
+            #[derive(serde::Deserialize)]
+            struct BgAnalysis {
+                should_generate: bool,
+                image_prompt: Option<String>,
+            }
+
+            let analysis: BgAnalysis = match serde_json::from_str(clean) {
+                Ok(a) => a,
+                Err(e) => {
+                    eprintln!("[ImageGen] BG analyzer parse failed: {} | raw: {}", e, json_str);
+                    return;
+                }
+            };
+
+            if !analysis.should_generate {
+                println!("[ImageGen] BG analyzer: no image needed");
+                return;
+            }
+
+            let prompt = match analysis.image_prompt {
+                Some(p) if !p.is_empty() => p,
+                _ => return,
+            };
+
+            println!("[ImageGen] BG analyzer triggered generation: {}", prompt);
+
+            match imagegen_svc.generate(prompt.clone(), None, None, Some(window_size)).await {
+                Ok(result) => {
+                    let _ = window_for_img.emit("imagegen:done", &result);
+                    println!("[ImageGen] BG image generated: {}", result.image_url);
+                }
+                Err(e) => {
+                    eprintln!("[ImageGen] BG generation failed: {}", e);
+                    let _ = window_for_img.emit("imagegen:error", e.to_string());
+                }
             }
         });
     }

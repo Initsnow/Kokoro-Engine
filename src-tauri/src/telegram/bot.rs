@@ -585,7 +585,7 @@ async fn handle_image_tags(bot: &Bot, chat_id: ChatId, response: &str, app: &tau
             None => break,
         };
 
-        match imagegen.generate(prompt.to_string(), None, None).await {
+        match imagegen.generate(prompt.to_string(), None, None, None).await {
             Ok(result) => {
                 // result.image_url is a local file path
                 match tokio::fs::read(&result.image_url).await {

@@ -1,3 +1,4 @@
+use crate::commands::system::WindowSizeState;
 use crate::imagegen::config::{load_config, save_config, ImageGenSystemConfig};
 use crate::imagegen::{ImageGenParams, ImageGenResult, ImageGenService};
 use tauri::{command, State};
@@ -5,12 +6,14 @@ use tauri::{command, State};
 #[command]
 pub async fn generate_image(
     state: State<'_, ImageGenService>,
+    window_size_state: State<'_, WindowSizeState>,
     prompt: String,
     provider_id: Option<String>,
     params: Option<ImageGenParams>,
 ) -> Result<ImageGenResult, String> {
+    let window_size = window_size_state.get().await;
     state
-        .generate(prompt, provider_id, params)
+        .generate(prompt, provider_id, params, Some(window_size))
         .await
         .map_err(|e| e.to_string())
 }

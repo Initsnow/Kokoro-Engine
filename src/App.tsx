@@ -127,6 +127,9 @@ import {
   // onSingingProgress — reserved for future use
   // New: ImageGen
   testSdConnection,
+  setWindowSize,
+  onChatImageGen,
+  generateImage,
   // New: Vision
   captureScreenNow,
   // New: Live2D
@@ -248,6 +251,15 @@ function App() {
   };
 
   useEffect(() => {
+    const sync = () => {
+      setWindowSize(window.innerWidth, window.innerHeight).catch(console.error);
+    };
+    sync();
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
+  }, []);
+
+  useEffect(() => {
     ttsService.init();
 
     // Fetch initial data for settings
@@ -310,6 +322,16 @@ function App() {
       const assetUrl = convertFileSrc(result.image_url);
       console.log("[App] Received generated image:", assetUrl);
       setGeneratedImage(assetUrl);
+    });
+
+    // Listen for chat-triggered image generation requests
+    const unlistenChatImageGen = onChatImageGen(({ prompt }) => {
+      console.log("[App] chat-imagegen triggered, prompt:", prompt);
+      generateImage(prompt).then(result => {
+        const assetUrl = convertFileSrc(result.image_url);
+        setGeneratedImage(assetUrl);
+        bgSlideshow.setConfig({ mode: "generated" });
+      }).catch(err => console.error("[App] chat-imagegen generation failed:", err));
     });
 
     // ── MOD System: Theme override ──
@@ -411,6 +433,7 @@ function App() {
     return () => {
       ttsService.cleanup();
       unlistenImageGen.then(unlisten => unlisten());
+      unlistenChatImageGen.then(unlisten => unlisten());
       unlistenModTheme.then(unlisten => unlisten());
       unlistenModComponents.then(unlisten => unlisten());
       unlistenModUiMessage.then(unlisten => unlisten());

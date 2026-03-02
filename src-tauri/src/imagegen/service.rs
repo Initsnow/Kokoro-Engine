@@ -104,6 +104,7 @@ impl ImageGenService {
         prompt: String,
         provider_id: Option<String>,
         params: Option<ImageGenParams>,
+        window_size: Option<(u32, u32)>,
     ) -> Result<ImageGenResult, ImageGenError> {
         let providers = self.providers.read().await;
         
@@ -123,6 +124,14 @@ impl ImageGenService {
         let mut gen_params = params.unwrap_or_default();
         if gen_params.prompt.is_empty() {
             gen_params.prompt = prompt.clone();
+        }
+
+        if gen_params.size.as_deref() == Some("auto") {
+            if let Some((w, h)) = window_size {
+                gen_params.size = Some(format!("{}x{}", w, h));
+            } else {
+                gen_params.size = Some("1024x1024".to_string());
+            }
         }
 
         println!("[ImageGen] Generating with provider '{}': {}", target_id, prompt);

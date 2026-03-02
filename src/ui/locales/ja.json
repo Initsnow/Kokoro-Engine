@@ -292,7 +292,9 @@
                 "fetching": "取得中...",
                 "select_checkpoint": "チェックポイントを選択...",
                 "checkpoint_placeholder": "チェックポイント (任意)",
-                "size": "画像サイズ"
+                "size": "画像サイズ",
+                "size_auto": "自動 (ウィンドウ)",
+                "size_custom": "カスタム..."
             },
             "test": {
                 "button": "接続テスト",

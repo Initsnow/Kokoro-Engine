@@ -46,6 +46,10 @@ export async function getSystemStatus(): Promise<SystemStatus> {
     return invoke<SystemStatus>("get_system_status");
 }
 
+export async function setWindowSize(width: number, height: number): Promise<void> {
+    return invoke("set_window_size", { width, height });
+}
+
 // ── Character Commands ─────────────────────────────
 
 export async function getCharacterState(): Promise<CharacterState> {

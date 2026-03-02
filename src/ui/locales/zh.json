@@ -292,7 +292,9 @@
                 "fetching": "获取中...",
                 "select_checkpoint": "选择模型 checkpoint...",
                 "checkpoint_placeholder": "可选 checkpoint",
-                "size": "图片尺寸"
+                "size": "图片尺寸",
+                "size_auto": "自动 (跟随窗口)",
+                "size_custom": "自定义..."
             },
             "test": {
                 "button": "测试连接",
