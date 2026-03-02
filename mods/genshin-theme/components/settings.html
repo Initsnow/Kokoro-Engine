@@ -1817,17 +1817,11 @@
 
                             const contentSpan = document.createElement('span');
                             contentSpan.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px';
-                            contentSpan.textContent = (mem.content || '').substring(0, 50) + (mem.content && mem.content.length > 50 ? '...' : '');
+                            contentSpan.textContent = (mem.content || '').substring(0, 30) + (mem.content && mem.content.length > 30 ? '...' : '');
                             header.appendChild(contentSpan);
 
                             const btnGroup = document.createElement('div');
                             btnGroup.style.cssText = 'display:flex;gap:4px;align-items:center;flex-shrink:0';
-
-                            const timeSpan = document.createElement('span');
-                            timeSpan.style.fontSize = '10px';
-                            timeSpan.style.opacity = '0.6';
-                            timeSpan.textContent = timeStr;
-                            btnGroup.appendChild(timeSpan);
 
                             // Edit button
                             const editBtn = document.createElement('button');
@@ -1861,7 +1855,7 @@
 
                             const descDiv = document.createElement('div');
                             descDiv.className = 'list-item-desc';
-                            descDiv.textContent = `重要度: ${mem.importance || 0}`;
+                            descDiv.textContent = `重要度: ${mem.importance || 0}${timeStr ? '  ·  ' + timeStr : ''}`;
                             item.appendChild(descDiv);
                         }
 
