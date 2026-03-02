@@ -484,6 +484,9 @@
                 <div class="sidebar-tab" data-tab="imagegen" data-title="绘图">绘图</div>
                 <div class="sidebar-tab" data-tab="mods" data-title="模组">模组</div>
                 <div class="sidebar-tab" data-tab="mcp" data-title="MCP 服务">MCP 服务</div>
+                <div class="sidebar-tab" data-tab="telegram" data-title="Telegram">Telegram</div>
+                <div class="sidebar-tab" data-tab="jailbreak" data-title="破限提示词">破限提示词</div>
+                <div class="sidebar-tab" data-tab="backup" data-title="备份与恢复">备份与恢复</div>
             </div>
         </div>
 
@@ -552,6 +555,9 @@
                     case 'imagegen': renderImageGen(); break;
                     case 'mods': renderMods(); break;
                     case 'mcp': renderMCP(); break;
+                    case 'telegram': renderTelegram(); break;
+                    case 'jailbreak': renderJailbreak(); break;
+                    case 'backup': renderBackup(); break;
                 }
             }
 
@@ -1482,6 +1488,22 @@
                         }, 0);
                     }
 
+                    // Model (openai_whisper and faster_whisper)
+                    if (activeProv.provider_type === 'openai_whisper' || activeProv.provider_type === 'faster_whisper') {
+                        const modelId = 'stt_prov_model';
+                        const placeholder = activeProv.provider_type === 'openai_whisper' ? 'whisper-1' : 'base';
+                        provCfgSec.appendChild(createRow("模型", `
+                            <input class="gi-input" type="text" value="${escapeHtml(activeProv.model || '')}" id="${modelId}" placeholder="${placeholder}">
+                        `));
+                        setTimeout(() => {
+                            const el = document.getElementById(modelId);
+                            if (el) el.onchange = function () {
+                                config.providers = sttProviders.map(p => p.id === activeProv.id ? { ...p, model: this.value } : p);
+                                Kokoro.action('save_stt_config', { config });
+                            };
+                        }, 0);
+                    }
+
                     sec.appendChild(provCfgSec);
                 }
 
@@ -2113,16 +2135,50 @@
 
                     // Image size
                     const sizeId = `imggen_size_${idx}`;
-                    sub.appendChild(createRow("图片尺寸", `
-                        <input class="gi-input" type="text" value="${escapeHtml(p.size || '512x512')}" id="${sizeId}" placeholder="512x512">
-                    `));
-                    setTimeout(() => {
-                        const el = document.getElementById(sizeId);
-                        if (el) el.onchange = function () {
-                            config.providers[idx].size = this.value;
-                            Kokoro.action('save_image_gen_config', { config });
-                        };
-                    }, 0);
+                    if (provType === 'stable_diffusion' || provType === 'google') {
+                        const sdPresets = provType === 'google'
+                            ? ['auto', '1:1', '16:9', '9:16', '4:3', '3:4']
+                            : ['auto', '512x512', '768x768', '1024x1024', '1280x720', '1920x1080'];
+                        const currentSize = p.size || 'auto';
+                        const isCustom = !sdPresets.includes(currentSize);
+                        const sizeSelectId = `imggen_size_sel_${idx}`;
+                        const sizeInputId = `imggen_size_inp_${idx}`;
+                        sub.appendChild(createRow("图片尺寸", `
+                            <div style="display:flex;flex-direction:column;gap:4px;width:100%">
+                                <select class="gi-select" id="${sizeSelectId}">
+                                    ${sdPresets.map(s => `<option value="${s}" ${(!isCustom && currentSize === s) ? 'selected' : ''}>${s === 'auto' ? '自动 (跟随窗口)' : s}</option>`).join('')}
+                                    <option value="custom" ${isCustom ? 'selected' : ''}>自定义...</option>
+                                </select>
+                                ${isCustom ? `<input class="gi-input" type="text" id="${sizeInputId}" value="${escapeHtml(currentSize)}" placeholder="1024x1024">` : ''}
+                            </div>
+                        `));
+                        setTimeout(() => {
+                            const sel = document.getElementById(sizeSelectId);
+                            if (sel) sel.onchange = function () {
+                                if (this.value !== 'custom') {
+                                    config.providers[idx].size = this.value;
+                                    Kokoro.action('save_image_gen_config', { config });
+                                    render();
+                                }
+                            };
+                            const inp = document.getElementById(sizeInputId);
+                            if (inp) inp.onchange = function () {
+                                config.providers[idx].size = this.value;
+                                Kokoro.action('save_image_gen_config', { config });
+                            };
+                        }, 0);
+                    } else {
+                        sub.appendChild(createRow("图片尺寸", `
+                            <input class="gi-input" type="text" value="${escapeHtml(p.size || '1024x1024')}" id="${sizeId}" placeholder="1024x1024">
+                        `));
+                        setTimeout(() => {
+                            const el = document.getElementById(sizeId);
+                            if (el) el.onchange = function () {
+                                config.providers[idx].size = this.value;
+                                Kokoro.action('save_image_gen_config', { config });
+                            };
+                        }, 0);
+                    }
 
 
                     // Test + Generate Test + Delete buttons
@@ -2413,6 +2469,163 @@
                     addSec.appendChild(addBtnRow);
                     sec.appendChild(addSec);
                 }
+
+                body.appendChild(sec);
+            }
+
+            // ── 13. Telegram Tab ────────────────
+            function renderTelegram() {
+                const cfg = state.telegramConfig || {};
+                const sec = createSection("Telegram Bot");
+
+                sec.appendChild(createToggle("启用 Telegram Bot", "通过 Telegram 远程与角色交互", cfg.enabled, (v) => {
+                    cfg.enabled = v;
+                    Kokoro.action('save_telegram_config', { config: cfg });
+                }));
+
+                const tokenId = 'tg_token';
+                sec.appendChild(createRow("Bot Token", `
+                    <input class="gi-input" type="password" value="${escapeHtml(cfg.bot_token || '')}" id="${tokenId}" placeholder="123456:ABC-DEF...">
+                `));
+                setTimeout(() => {
+                    const el = document.getElementById(tokenId);
+                    if (el) el.onchange = function () {
+                        cfg.bot_token = this.value;
+                        Kokoro.action('save_telegram_config', { config: cfg });
+                    };
+                }, 0);
+
+                const chatId = 'tg_chat_id';
+                sec.appendChild(createRow("Chat ID 白名单", `
+                    <input class="gi-input" type="text" value="${escapeHtml((cfg.allowed_chat_ids || []).join(','))}" id="${chatId}" placeholder="123456789,987654321">
+                `));
+                setTimeout(() => {
+                    const el = document.getElementById(chatId);
+                    if (el) el.onchange = function () {
+                        cfg.allowed_chat_ids = this.value.split(',').map(s => s.trim()).filter(Boolean).map(Number);
+                        Kokoro.action('save_telegram_config', { config: cfg });
+                    };
+                }, 0);
+
+                sec.appendChild(createToggle("允许语音消息", "接收并识别语音消息", cfg.allow_voice, (v) => {
+                    cfg.allow_voice = v;
+                    Kokoro.action('save_telegram_config', { config: cfg });
+                }));
+
+                sec.appendChild(createToggle("允许图片消息", "接收并分析图片", cfg.allow_image, (v) => {
+                    cfg.allow_image = v;
+                    Kokoro.action('save_telegram_config', { config: cfg });
+                }));
+
+                const note = document.createElement('div');
+                note.style.cssText = 'margin-top:12px;padding:10px;background:rgba(0,0,0,0.03);border-radius:6px;font-size:11px;color:var(--gi-ink-muted)';
+                note.textContent = 'ℹ️ 前往 @BotFather 创建 Bot 并获取 Token。Chat ID 可通过 @userinfobot 查询。';
+                sec.appendChild(note);
+
+                body.appendChild(sec);
+            }
+
+            // ── 14. Jailbreak Tab ────────────────
+            function renderJailbreak() {
+                const sec = createSection("破限提示词");
+
+                const desc = document.createElement('div');
+                desc.style.cssText = 'font-size:12px;color:var(--gi-ink-muted);margin-bottom:12px;line-height:1.6';
+                desc.textContent = '添加系统提示词前缀以绕过模型限制。此内容将被添加到所有对话的开头。';
+                sec.appendChild(desc);
+
+                const textareaId = 'jailbreak_textarea';
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = `<textarea class="gi-input" id="${textareaId}" style="width:100%;min-height:260px;resize:vertical;font-family:monospace;font-size:12px" placeholder="在此输入破限提示词..."></textarea>`;
+                sec.appendChild(wrapper);
+
+                setTimeout(async () => {
+                    const el = document.getElementById(textareaId);
+                    if (!el) return;
+                    try {
+                        const current = await Kokoro.invoke('get_jailbreak_prompt');
+                        el.value = current || '';
+                    } catch(e) {}
+                }, 0);
+
+                const charCount = document.createElement('div');
+                charCount.style.cssText = 'font-size:11px;color:var(--gi-ink-muted);margin-top:4px;text-align:right';
+                charCount.id = 'jailbreak_charcount';
+                charCount.textContent = '0 字符';
+                sec.appendChild(charCount);
+
+                setTimeout(() => {
+                    const el = document.getElementById(textareaId);
+                    const cc = document.getElementById('jailbreak_charcount');
+                    if (el && cc) {
+                        el.oninput = () => { cc.textContent = el.value.length + ' 字符'; };
+                    }
+                }, 50);
+
+                const btnRow = document.createElement('div');
+                btnRow.style.cssText = 'display:flex;gap:8px;margin-top:12px';
+
+                const saveBtn = document.createElement('button');
+                saveBtn.className = 'gi-btn primary';
+                saveBtn.textContent = '保存';
+                saveBtn.onclick = async () => {
+                    const el = document.getElementById(textareaId);
+                    if (!el) return;
+                    await Kokoro.invoke('set_jailbreak_prompt', { prompt: el.value });
+                    saveBtn.textContent = '✓ 已保存';
+                    setTimeout(() => { saveBtn.textContent = '保存'; }, 2000);
+                };
+                btnRow.appendChild(saveBtn);
+
+                const clearBtn = document.createElement('button');
+                clearBtn.className = 'gi-btn danger';
+                clearBtn.textContent = '清空';
+                clearBtn.onclick = () => {
+                    if (!confirm('确定要清空破限提示词吗？')) return;
+                    const el = document.getElementById(textareaId);
+                    if (el) { el.value = ''; el.dispatchEvent(new Event('input')); }
+                };
+                btnRow.appendChild(clearBtn);
+
+                sec.appendChild(btnRow);
+                body.appendChild(sec);
+            }
+
+            // ── 15. Backup Tab ────────────────
+            function renderBackup() {
+                const sec = createSection("数据备份与恢复");
+
+                const desc = document.createElement('div');
+                desc.style.cssText = 'font-size:12px;color:var(--gi-ink-muted);margin-bottom:16px;line-height:1.6';
+                desc.textContent = '导出或导入 .kokoro 备份文件，包含所有配置、角色数据和记忆。';
+                sec.appendChild(desc);
+
+                const exportSec = createSection("导出备份");
+                const exportBtn = document.createElement('button');
+                exportBtn.className = 'gi-btn primary';
+                exportBtn.style.width = '100%';
+                exportBtn.textContent = '📦 导出 .kokoro 备份文件';
+                exportBtn.onclick = () => Kokoro.action('export_backup');
+                exportSec.appendChild(exportBtn);
+                sec.appendChild(exportSec);
+
+                const importSec = createSection("导入备份");
+                const importNote = document.createElement('div');
+                importNote.style.cssText = 'font-size:11px;color:var(--gi-ink-muted);margin-bottom:8px';
+                importNote.textContent = '⚠️ 导入将覆盖当前所有数据，操作不可撤销。';
+                importSec.appendChild(importNote);
+
+                const importBtn = document.createElement('button');
+                importBtn.className = 'gi-btn danger';
+                importBtn.style.width = '100%';
+                importBtn.textContent = '📂 导入 .kokoro 备份文件';
+                importBtn.onclick = () => {
+                    if (confirm('确定要导入备份吗？这将覆盖当前所有数据！')) {
+                        Kokoro.action('import_backup');
+                    }
+                };
+                importSec.appendChild(importBtn);
+                sec.appendChild(importSec);
 
                 body.appendChild(sec);
             }
