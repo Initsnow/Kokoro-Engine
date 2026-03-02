@@ -420,6 +420,16 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 8px;
+        }
+
+        .list-item-header > span:first-child {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
             font-weight: 600;
             color: var(--gi-ink);
         }
@@ -1817,6 +1827,7 @@
                             btnGroup.style.display = 'flex';
                             btnGroup.style.gap = '4px';
                             btnGroup.style.alignItems = 'center';
+                            btnGroup.style.flexShrink = '0';
 
                             const timeSpan = document.createElement('span');
                             timeSpan.style.fontSize = '10px';
@@ -1827,8 +1838,7 @@
                             // Edit button
                             const editBtn = document.createElement('button');
                             editBtn.className = 'gi-btn';
-                            editBtn.style.padding = '2px 8px';
-                            editBtn.style.fontSize = '10px';
+                            editBtn.style.cssText = 'padding:2px 8px;font-size:10px;white-space:nowrap;flex-shrink:0;min-width:36px';
                             editBtn.textContent = '编辑';
                             editBtn.onclick = () => {
                                 _memoryEditId = mem.id;
@@ -1841,8 +1851,7 @@
                             // Delete button
                             const delBtn = document.createElement('button');
                             delBtn.className = 'gi-btn danger';
-                            delBtn.style.padding = '2px 8px';
-                            delBtn.style.fontSize = '10px';
+                            delBtn.style.cssText = 'padding:2px 8px;font-size:10px;white-space:nowrap;flex-shrink:0;min-width:36px';
                             delBtn.textContent = '删除';
                             delBtn.onclick = () => {
                                 if (confirm('确定删除这条记忆？')) {

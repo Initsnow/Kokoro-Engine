@@ -19,7 +19,7 @@ import { JailbreakTab } from "./settings/JailbreakTab";
 import { BackupTab } from "./settings/BackupTab";
 import { useTranslation } from "react-i18next";
 import { setPersona, setResponseLanguage, setUserLanguage, listTtsProviders, listTtsVoices, getTtsConfig, saveTtsConfig, saveImageGenConfig, getSttConfig, saveSttConfig } from "../../lib/kokoro-bridge";
-import type { ProviderStatus, VoiceProfile, TtsSystemConfig, ImageGenSystemConfig, SttConfig } from "../../lib/kokoro-bridge";
+import type { ProviderStatus, VoiceProfile, TtsSystemConfig, ImageGenSystemConfig, SttConfig, TelegramConfig } from "../../lib/kokoro-bridge";
 import type { BackgroundConfig } from "../hooks/useBackgroundSlideshow";
 import type { Live2DDisplayMode } from "../../features/live2d/Live2DViewer";
 
@@ -54,6 +54,7 @@ interface SettingsPanelProps {
     sttConfig?: SttConfig;
     visionConfig?: any; // VisionConfig
     imageGenConfig?: ImageGenSystemConfig;
+    telegramConfig?: TelegramConfig;
     mcpServers?: any[]; // McpServerStatus[]
     modList?: any[]; // ModManifest[]
     ttsProviders?: ProviderStatus[];
@@ -98,7 +99,7 @@ const tabs: { id: TabId; label: string; icon: typeof Key }[] = [
     { id: "backup", label: "settings.tabs.backup", icon: HardDrive },
 ];
 
-export default function SettingsPanel({ isOpen, onClose, backgroundControls, displayMode, onDisplayModeChange, customModelPath, onCustomModelChange, gazeTracking: gazeTrackingProp, onGazeTrackingChange, sttConfig: sttConfigProp, voiceInterrupt: voiceInterruptProp, imageGenConfig: imageGenConfigProp }: SettingsPanelProps) {
+export default function SettingsPanel({ isOpen, onClose, backgroundControls, displayMode, onDisplayModeChange, customModelPath, onCustomModelChange, gazeTracking: gazeTrackingProp, onGazeTrackingChange, sttConfig: sttConfigProp, voiceInterrupt: voiceInterruptProp, imageGenConfig: imageGenConfigProp, telegramConfig: _telegramConfigProp }: SettingsPanelProps) {
     const { t, i18n } = useTranslation();
     const [activeTab, setActiveTab] = useState<TabId>("bg");
     const bg = backgroundControls;

@@ -95,6 +95,7 @@ import {
   // Config Getters
   getLlmConfig,
   getImageGenConfig,
+  getTelegramConfig,
   getVisionConfig,
   getSttConfig,
   listMcpServers,
@@ -199,6 +200,7 @@ function App() {
   const [sttConfig, setSttConfig] = useState<SttConfig | undefined>(undefined);
   const [visionConfig, setVisionConfig] = useState<VisionConfig | undefined>(undefined);
   const [imageGenConfig, setImageGenConfig] = useState<ImageGenSystemConfig | undefined>(undefined);
+  const [telegramConfig, setTelegramConfig] = useState<any>(undefined);
 
   // Lists
   const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
@@ -274,7 +276,8 @@ function App() {
       listMcpServers(),
       listMods(),
       getProactiveEnabled(),
-    ]).then(([tts, llm, stt, vision, imageGen, mcp, mods, proactive]) => {
+      getTelegramConfig(),
+    ]).then(([tts, llm, stt, vision, imageGen, mcp, mods, proactive, telegram]) => {
       setTtsConfig(tts);
       setLlmConfig(llm);
       setSttConfig(stt);
@@ -284,6 +287,7 @@ function App() {
       setModList(mods);
       setProactiveEnabledState(proactive);
       localStorage.setItem("kokoro_proactive_enabled", String(proactive));
+      setTelegramConfig(telegram);
     }).catch(err => console.error("[App] Failed to fetch initial configs:", err));
 
     // These may be slower (file system scans, network)
@@ -898,6 +902,7 @@ function App() {
             sttConfig={sttConfig}
             visionConfig={visionConfig}
             imageGenConfig={imageGenConfig}
+            telegramConfig={telegramConfig}
             mcpServers={mcpServers}
             modList={modList}
             ttsProviders={ttsProviders}
