@@ -464,7 +464,9 @@
                 "tools_one": "{{count}}개 도구",
                 "tools_other": "{{count}}개 도구",
                 "retry": "연결 재시도",
-                "remove": "서버 제거"
+                "remove": "서버 제거",
+                "toggle_on": "서버 활성화",
+                "toggle_off": "서버 비활성화"
             }
         },
         "jailbreak": {

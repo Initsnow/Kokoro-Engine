@@ -464,7 +464,9 @@
                 "tools_one": "{{count}} ツール",
                 "tools_other": "{{count}} ツール",
                 "retry": "再接続",
-                "remove": "サーバーを削除"
+                "remove": "サーバーを削除",
+                "toggle_on": "サーバーを有効化",
+                "toggle_off": "サーバーを無効化"
             }
         },
         "jailbreak": {

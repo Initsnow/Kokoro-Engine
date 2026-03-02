@@ -103,6 +103,7 @@ pub fn run() {
             commands::mcp::remove_mcp_server,
             commands::mcp::refresh_mcp_tools,
             commands::mcp::reconnect_mcp_server,
+            commands::mcp::toggle_mcp_server,
             commands::singing::check_rvc_status,
             commands::singing::list_rvc_models,
             commands::singing::list_rvc_models,

@@ -132,3 +132,61 @@ pub async fn reconnect_mcp_server(
 
     Ok(())
 }
+
+/// Toggle a server's enabled state — disable disconnects, enable reconnects in background.
+#[tauri::command]
+pub async fn toggle_mcp_server(
+    name: String,
+    enabled: bool,
+    manager: State<'_, Arc<Mutex<McpManager>>>,
+    registry: State<'_, Arc<RwLock<ActionRegistry>>>,
+) -> Result<(), String> {
+    let mgr_arc = manager.inner().clone();
+    let reg_arc = registry.inner().clone();
+
+    let cfg = {
+        let mut mgr = mgr_arc.lock().await;
+        mgr.toggle_server(&name, enabled).await?;
+
+        if enabled {
+            let cfg = mgr.get_config(&name)
+                .ok_or_else(|| format!("Server '{}' not found", name))?;
+            mgr.mark_connecting(&name);
+            Some(cfg)
+        } else {
+            // Disabled — refresh action registry to remove tools
+            None
+        }
+    };
+
+    if let Some(cfg) = cfg {
+        // Enable: spawn background connection
+        tauri::async_runtime::spawn(async move {
+            println!("[MCP] Enabling and connecting '{}'...", cfg.name);
+            let connect_result = {
+                let mut mgr = mgr_arc.lock().await;
+                let result = mgr.connect_server(&cfg).await;
+                mgr.clear_connecting(&cfg.name);
+                if let Err(ref e) = result {
+                    mgr.set_connection_error(&cfg.name, e.to_string());
+                }
+                result
+            };
+
+            match connect_result {
+                Ok(()) => {
+                    println!("[MCP] Connected '{}', refreshing tools...", cfg.name);
+                    crate::mcp::bridge::register_mcp_tools(&mgr_arc, &reg_arc).await;
+                }
+                Err(e) => {
+                    eprintln!("[MCP] Connection failed for '{}': {}", cfg.name, e);
+                }
+            }
+        });
+    } else {
+        // Disable: refresh action registry immediately
+        crate::mcp::bridge::register_mcp_tools(&mgr_arc, &reg_arc).await;
+    }
+
+    Ok(())
+}

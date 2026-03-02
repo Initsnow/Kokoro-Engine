@@ -464,7 +464,9 @@
                 "tools_one": "{{count}} tool",
                 "tools_other": "{{count}} tools",
                 "retry": "Retry connection",
-                "remove": "Remove server"
+                "remove": "Remove server",
+                "toggle_on": "Enable server",
+                "toggle_off": "Disable server"
             }
         },
         "jailbreak": {

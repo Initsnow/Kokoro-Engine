@@ -637,6 +637,7 @@ export interface McpServerConfig {
 
 export interface McpServerStatus {
     name: string;
+    enabled: boolean;
     connected: boolean;
     tool_count: number;
     server_version: string | null;
@@ -662,6 +663,10 @@ export async function refreshMcpTools(): Promise<void> {
 
 export async function reconnectMcpServer(name: string): Promise<void> {
     return invoke("reconnect_mcp_server", { name });
+}
+
+export async function toggleMcpServer(name: string, enabled: boolean): Promise<void> {
+    return invoke("toggle_mcp_server", { name, enabled });
 }
 
 // ── Conversation History ───────────────────────────────

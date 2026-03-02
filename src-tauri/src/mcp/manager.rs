@@ -3,7 +3,7 @@
 //! Loads server configs, starts/stops servers, aggregates tools.
 
 use super::client::McpClient;
-use super::transport::{StdioTransport, StreamableHttpTransport};
+use super::transport::{SseTransport, StdioTransport, StreamableHttpTransport};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -48,6 +48,7 @@ fn default_true() -> bool {
 #[derive(Debug, Clone, Serialize)]
 pub struct McpServerStatus {
     pub name: String,
+    pub enabled: bool,
     pub connected: bool,
     pub tool_count: usize,
     pub server_version: Option<String>,
@@ -156,11 +157,19 @@ impl McpManager {
         println!("[MCP] Connecting to '{}' (transport: {})...", config.name, config.transport_type);
 
         let transport: Arc<dyn super::transport::McpTransport> = match config.transport_type.as_str() {
-            "streamable_http" | "sse" => {
+            "streamable_http" | "streamable-http" => {
                 let url = config.url.as_deref().ok_or_else(|| {
                     format!("Server '{}' has type '{}' but no 'url' configured", config.name, config.transport_type)
                 })?;
                 Arc::new(StreamableHttpTransport::new(url))
+            }
+            "sse" => {
+                let url = config.url.as_deref().ok_or_else(|| {
+                    format!("Server '{}' has type 'sse' but no 'url' configured", config.name)
+                })?;
+                let transport = SseTransport::new(url);
+                transport.connect().await?;
+                Arc::new(transport)
             }
             _ => {
                 // Default: stdio
@@ -217,6 +226,21 @@ impl McpManager {
         Ok(())
     }
 
+    /// Toggle a server's enabled state.
+    /// If disabling, disconnects the server. If enabling, only saves config
+    /// (caller should spawn background connection task).
+    pub async fn toggle_server(&mut self, name: &str, enabled: bool) -> Result<(), String> {
+        let config = self.configs.iter_mut().find(|c| c.name == name)
+            .ok_or_else(|| format!("Server '{}' not found", name))?;
+        config.enabled = enabled;
+        self.save_configs()?;
+
+        if !enabled {
+            self.disconnect_server(name).await?;
+        }
+        Ok(())
+    }
+
     /// Get status of all configured servers.
     /// Only locks individual clients that are actually connected — pending /
     /// disconnected servers return immediately without extra lock contention.
@@ -232,6 +256,7 @@ impl McpManager {
             if is_pending {
                 statuses.push(McpServerStatus {
                     name: config.name.clone(),
+                    enabled: config.enabled,
                     connected: false,
                     tool_count: 0,
                     server_version: None,
@@ -261,6 +286,7 @@ impl McpManager {
 
             statuses.push(McpServerStatus {
                 name: config.name.clone(),
+                enabled: config.enabled,
                 connected,
                 tool_count,
                 server_version: version,

@@ -464,7 +464,9 @@
                 "tools_one": "{{count}} 个工具",
                 "tools_other": "{{count}} 个工具",
                 "retry": "重试连接",
-                "remove": "移除服务器"
+                "remove": "移除服务器",
+                "toggle_on": "启用服务器",
+                "toggle_off": "禁用服务器"
             }
         },
         "jailbreak": {

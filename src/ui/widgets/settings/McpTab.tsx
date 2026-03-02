@@ -3,11 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import {
     Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle,
-    Loader2, Wrench, AlertCircle, Copy
+    Loader2, Wrench, AlertCircle, Copy, Power
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
-    listMcpServers, addMcpServer, removeMcpServer, refreshMcpTools, reconnectMcpServer
+    listMcpServers, addMcpServer, removeMcpServer, refreshMcpTools, reconnectMcpServer, toggleMcpServer
 } from "../../../lib/kokoro-bridge";
 import type { McpServerConfig, McpServerStatus } from "../../../lib/kokoro-bridge";
 
@@ -166,6 +166,16 @@ export default function McpTab() {
         }
     };
 
+    // ── Toggle server enabled/disabled ────────────────────
+    const handleToggle = async (name: string, currentEnabled: boolean) => {
+        try {
+            await toggleMcpServer(name, !currentEnabled);
+            await fetchServers();
+        } catch (e) {
+            console.error("[McpTab] Toggle failed:", e);
+        }
+    };
+
     // ── Refresh tools ────────────────────────────────────
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -278,11 +288,13 @@ export default function McpTab() {
                             className={clsx(
                                 "flex items-center justify-between px-4 py-3 rounded-lg",
                                 "bg-[var(--color-bg-surface)] border",
-                                srv.status === "connected"
-                                    ? "border-emerald-500/30"
-                                    : srv.status === "connecting"
-                                        ? "border-amber-500/30"
-                                        : "border-red-500/30"
+                                !srv.enabled
+                                    ? "border-[var(--color-border)] opacity-50"
+                                    : srv.status === "connected"
+                                        ? "border-emerald-500/30"
+                                        : srv.status === "connecting"
+                                            ? "border-amber-500/30"
+                                            : "border-red-500/30"
                             )}
                         >
                             <div className="flex items-center gap-3 min-w-0">
@@ -319,8 +331,22 @@ export default function McpTab() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
-                                {/* Retry button — visible when disconnected */}
-                                {srv.status === "disconnected" && (
+                                {/* Toggle enabled/disabled */}
+                                <motion.button
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => handleToggle(srv.name, srv.enabled)}
+                                    className={clsx(
+                                        "p-2 rounded-md transition-colors",
+                                        srv.enabled
+                                            ? "text-[var(--color-accent)] hover:text-emerald-400"
+                                            : "text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
+                                    )}
+                                    title={srv.enabled ? t("settings.mcp.status.toggle_off") : t("settings.mcp.status.toggle_on")}
+                                >
+                                    <Power size={14} strokeWidth={1.5} />
+                                </motion.button>
+                                {/* Retry button — visible when disconnected and enabled */}
+                                {srv.status === "disconnected" && srv.enabled && (
                                     <motion.button
                                         whileTap={{ scale: 0.9 }}
                                         onClick={() => handleReconnect(srv.name)}
