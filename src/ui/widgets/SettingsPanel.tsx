@@ -18,7 +18,7 @@ import TelegramTab from "./settings/TelegramTab";
 import { JailbreakTab } from "./settings/JailbreakTab";
 import { BackupTab } from "./settings/BackupTab";
 import { useTranslation } from "react-i18next";
-import { setPersona, setResponseLanguage, setUserLanguage, listTtsProviders, listTtsVoices, getTtsConfig, saveTtsConfig, getImageGenConfig, saveImageGenConfig, getSttConfig, saveSttConfig } from "../../lib/kokoro-bridge";
+import { setPersona, setResponseLanguage, setUserLanguage, listTtsProviders, listTtsVoices, getTtsConfig, saveTtsConfig, saveImageGenConfig, getSttConfig, saveSttConfig } from "../../lib/kokoro-bridge";
 import type { ProviderStatus, VoiceProfile, TtsSystemConfig, ImageGenSystemConfig, SttConfig } from "../../lib/kokoro-bridge";
 import type { BackgroundConfig } from "../hooks/useBackgroundSlideshow";
 import type { Live2DDisplayMode } from "../../features/live2d/Live2DViewer";
@@ -98,7 +98,7 @@ const tabs: { id: TabId; label: string; icon: typeof Key }[] = [
     { id: "backup", label: "settings.tabs.backup", icon: HardDrive },
 ];
 
-export default function SettingsPanel({ isOpen, onClose, backgroundControls, displayMode, onDisplayModeChange, customModelPath, onCustomModelChange, gazeTracking: gazeTrackingProp, onGazeTrackingChange, sttConfig: sttConfigProp, voiceInterrupt: voiceInterruptProp }: SettingsPanelProps) {
+export default function SettingsPanel({ isOpen, onClose, backgroundControls, displayMode, onDisplayModeChange, customModelPath, onCustomModelChange, gazeTracking: gazeTrackingProp, onGazeTrackingChange, sttConfig: sttConfigProp, voiceInterrupt: voiceInterruptProp, imageGenConfig: imageGenConfigProp }: SettingsPanelProps) {
     const { t, i18n } = useTranslation();
     const [activeTab, setActiveTab] = useState<TabId>("bg");
     const bg = backgroundControls;
@@ -157,8 +157,8 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
     const [isTtsLoading, setIsTtsLoading] = useState(false);
     const [localTtsConfig, setLocalTtsConfig] = useState<TtsSystemConfig | null>(null);
 
-    // Image Gen State
-    const [localImageGenConfig, setLocalImageGenConfig] = useState<ImageGenSystemConfig | null>(null);
+    // Image Gen State — initialize from prop to avoid IPC fetch on every open
+    const [localImageGenConfig, setLocalImageGenConfig] = useState<ImageGenSystemConfig | null>(imageGenConfigProp ?? null);
 
     // Vision Mode
     const [visionEnabled, setVisionEnabled] = useState(() => localStorage.getItem("kokoro_vision_enabled") === "true");
@@ -203,16 +203,14 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
     const fetchData = async () => {
         setIsTtsLoading(true);
         try {
-            const [providers, voices, ttsConfig, imageGenConfig] = await Promise.all([
+            const [providers, voices, ttsConfig] = await Promise.all([
                 listTtsProviders(),
                 listTtsVoices(),
                 getTtsConfig(),
-                getImageGenConfig(),
             ]);
             setTtsProviders(providers);
             setTtsVoices(voices);
             setLocalTtsConfig(ttsConfig);
-            setLocalImageGenConfig(imageGenConfig);
             // STT config comes from prop (sttConfigProp), no need to re-fetch
             if (!localSttConfig && !sttConfigProp) {
                 const sttConfig = await getSttConfig();
