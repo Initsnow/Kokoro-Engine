@@ -28,7 +28,7 @@ interface TranscriptionResult {
 
 export function useVoiceInput(
     onFinalTranscription: (text: string) => void,
-    onPartialTranscription?: (text: string) => void
+    onPartialTranscription?: (text: string) => void,
 ) {
     const [state, setState] = useState<VoiceState>(VoiceState.Idle);
     const [volume, setVolume] = useState(0);
@@ -36,10 +36,6 @@ export function useVoiceInput(
 
     // Store confirmed segments (history) + current active segments
     const segmentsRef = useRef<TranscriptionSegment[]>([]);
-    // To present a smooth UI, we also keep a refs to the last committed text length
-    // so we don't jitter too much.
-    // Actually, just deriving text from segmentsRef is safest.
-    // We use a ref for segments to avoid dependency cycles in `performSnapshot`.
 
     const audioContext = useRef<AudioContext | null>(null);
     const mediaStream = useRef<MediaStream | null>(null);
@@ -50,7 +46,19 @@ export function useVoiceInput(
     const lastFlushTime = useRef<number>(0);
     const isRunning = useRef(false);
 
+    // VAD auto-stop state
+    const autoStopRef = useRef(false);
+    const silenceFrameCount = useRef(0);
+    const speechDetected = useRef(false);
+    const stopRef = useRef<(() => Promise<void>) | null>(null);
+
     // ── Audio Processing Loop ─────────────────────────────────────────
+
+    // VAD thresholds for auto-stop
+    // ~2.5s of silence at 4096 buffer / 16kHz = ~256ms per frame → 10 frames ≈ 2.5s
+    const SILENCE_FRAMES_TO_STOP = 10;
+    // Require at least some speech before auto-stopping
+    const SPEECH_RMS_THRESHOLD = 0.02;
 
     const processAudioChunk = useCallback((inputData: Float32Array) => {
         // 1. Calculate Volume for UI
@@ -64,9 +72,25 @@ export function useVoiceInput(
         const vol = Math.max(0, (db + 60) * 2);
         setVolume(vol);
 
-        // 2. Send to Backend
-        // Convert Float32Array to standard Array for msgpack serialization
-        // (Tauri invoke handles TypedArrays efficiently in v2, but check if array needed)
+        // 2. VAD auto-stop: track silence after speech
+        if (autoStopRef.current) {
+            if (rms > SPEECH_RMS_THRESHOLD) {
+                speechDetected.current = true;
+                silenceFrameCount.current = 0;
+            } else if (speechDetected.current) {
+                // Any frame below speech threshold counts as silence
+                silenceFrameCount.current++;
+                if (silenceFrameCount.current >= SILENCE_FRAMES_TO_STOP) {
+                    console.log("[STT] Auto-stop: silence detected after speech");
+                    silenceFrameCount.current = 0;
+                    speechDetected.current = false;
+                    // Defer stop to avoid calling during audio callback
+                    setTimeout(() => stopRef.current?.(), 0);
+                }
+            }
+        }
+
+        // 3. Send to Backend
         invoke("process_audio_chunk", { chunk: Array.from(inputData) })
             .catch(err => console.warn("Audio drop:", err));
     }, []);
@@ -131,8 +155,9 @@ export function useVoiceInput(
 
     // ── Start/Stop Control ────────────────────────────────────────────
 
-    const start = useCallback(async () => {
+    const start = useCallback(async (opts?: { autoStopOnSilence?: boolean }) => {
         if (state !== VoiceState.Idle) return;
+        autoStopRef.current = opts?.autoStopOnSilence ?? false;
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -165,6 +190,8 @@ export function useVoiceInput(
             // Reset State
             isRunning.current = true;
             lastFlushTime.current = Date.now();
+            silenceFrameCount.current = 0;
+            speechDetected.current = false;
             setState(VoiceState.Listening);
             setPartialText("");
             segmentsRef.current = []; // Reset history
@@ -228,6 +255,11 @@ export function useVoiceInput(
         segmentsRef.current = [];
 
     }, [onFinalTranscription]);
+
+    // Keep stopRef in sync so VAD auto-stop can call the latest stop()
+    useEffect(() => {
+        stopRef.current = stop;
+    }, [stop]);
 
     // Cleanup on unmount
     useEffect(() => {

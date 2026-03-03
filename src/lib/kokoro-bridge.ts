@@ -578,6 +578,8 @@ export interface SttConfig {
     active_provider: string;
     language?: string;
     auto_send: boolean;
+    wake_word_enabled: boolean;
+    wake_word?: string;
     providers: SttProviderConfig[];
 }
 

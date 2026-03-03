@@ -243,6 +243,11 @@
                 "title": "音声割り込み",
                 "desc": "発話中にTTS再生を中断する"
             },
+            "wake_word": {
+                "title": "ウェイクワード",
+                "desc": "キーワードを検出したときに自動的にリスニングを開始する",
+                "placeholder": "例：ねえ心音"
+            },
             "info": {
                 "openai": "OpenAI Whisper APIを使用します。有効なAPIキーが必要です。",
                 "whisper_cpp": "{{url}} のローカルwhisper.cppサーバーに接続します。",

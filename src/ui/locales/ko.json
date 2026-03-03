@@ -243,6 +243,11 @@
                 "title": "음성 중단",
                 "desc": "말하기 시작하면 TTS 재생 중단"
             },
+            "wake_word": {
+                "title": "웨이크 워드",
+                "desc": "키워드가 감지되면 자동으로 듣기 시작",
+                "placeholder": "예: 안녕 코코로"
+            },
             "info": {
                 "openai": "OpenAI Whisper API를 사용합니다. 유효한 API 키가 필요합니다.",
                 "whisper_cpp": "{{url}}의 로컬 whisper.cpp 서버에 연결합니다.",

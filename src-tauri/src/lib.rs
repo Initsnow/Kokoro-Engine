@@ -97,6 +97,7 @@ pub fn run() {
             commands::stt::transcribe_audio,
             commands::stt::get_stt_config,
             commands::stt::save_stt_config,
+            commands::stt::transcribe_wake_word_audio,
             commands::actions::list_actions,
             commands::actions::execute_action,
             commands::mcp::list_mcp_servers,

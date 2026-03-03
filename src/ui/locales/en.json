@@ -223,7 +223,8 @@
                 "openai_whisper": "OpenAI Whisper (Cloud)",
                 "whisper_cpp": "Whisper.cpp (Local)",
                 "faster_whisper": "Faster Whisper (Local)",
-                "local_whisper": "Local Whisper (Generic)"
+                "local_whisper": "Local Whisper (Generic)",
+                "sensevoice": "SenseVoice (Local)"
             },
             "fields": {
                 "server_url": "Server URL",
@@ -242,6 +243,11 @@
             "voice_interrupt": {
                 "title": "Voice Interrupt",
                 "desc": "Speak to interrupt TTS playback"
+            },
+            "wake_word": {
+                "title": "Wake Word",
+                "desc": "Automatically start listening when the keyword is detected",
+                "placeholder": "e.g. Hey Kokoro"
             },
             "info": {
                 "openai": "Uses OpenAI Whisper API. Requires a valid API key.",

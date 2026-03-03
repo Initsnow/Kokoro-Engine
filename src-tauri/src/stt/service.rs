@@ -3,6 +3,7 @@
 use super::config::{SttConfig, SttProviderConfig};
 use super::interface::{AudioSource, SttEngine, SttError, TranscriptionResult};
 use super::openai::OpenAIWhisperProvider;
+use super::sensevoice::SenseVoiceProvider;
 use super::whisper_cpp::WhisperCppProvider;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -46,7 +47,7 @@ impl SttService {
     fn build_provider(config: &SttProviderConfig) -> Option<Arc<dyn SttEngine>> {
         match config.provider_type.as_str() {
             "openai_whisper" | "faster_whisper" | "local_whisper" => {
-                let api_key = config.resolve_api_key().unwrap_or_default(); // Allow empty key for local
+                let api_key = config.resolve_api_key().unwrap_or_default();
                 Some(Arc::new(OpenAIWhisperProvider::new(
                     config.id.clone(),
                     api_key,
@@ -55,6 +56,10 @@ impl SttService {
                 )))
             }
             "whisper_cpp" => Some(Arc::new(WhisperCppProvider::new(config.base_url.clone()))),
+            "sensevoice" => Some(Arc::new(SenseVoiceProvider::new(
+                config.id.clone(),
+                config.base_url.clone(),
+            ))),
             other => {
                 eprintln!("[STT] Unknown provider type: {}", other);
                 None

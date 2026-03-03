@@ -4,7 +4,7 @@ import { clsx } from "clsx";
 import { Send, Trash2, AlertCircle, MessageCircle, ChevronLeft, ImagePlus, X, Mic, MicOff, History } from "lucide-react";
 import { streamChat, onChatDelta, onChatDone, onChatError, onChatTranslation, clearHistory, uploadVisionImage, synthesize, onToolCallResult, listConversations, loadConversation, onTelegramChatSync, deleteLastMessages } from "../../lib/kokoro-bridge";
 import { listen } from "@tauri-apps/api/event";
-import { useVoiceInput, VoiceState, useTypingReveal } from "../hooks";
+import { useVoiceInput, VoiceState, useTypingReveal, useWakeWord } from "../hooks";
 import { useTranslation } from "react-i18next";
 import ConversationSidebar from "./ConversationSidebar";
 import { ChatMessage } from "./ChatMessage";
@@ -153,9 +153,22 @@ export default function ChatPanel() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // STT (Speech-to-Text) �?Advanced VAD Mode
-    const sttEnabled = localStorage.getItem("kokoro_stt_enabled") === "true";
-    const sttAutoSend = localStorage.getItem("kokoro_stt_auto_send") === "true";
+    // STT (Speech-to-Text) — Advanced VAD Mode
+    const [sttEnabled, setSttEnabled] = useState(() => localStorage.getItem("kokoro_stt_enabled") === "true");
+    const [sttAutoSend, setSttAutoSend] = useState(() => localStorage.getItem("kokoro_stt_auto_send") === "true");
+
+    useEffect(() => {
+        const syncSttSettings = () => {
+            setSttEnabled(localStorage.getItem("kokoro_stt_enabled") === "true");
+            setSttAutoSend(localStorage.getItem("kokoro_stt_auto_send") === "true");
+        };
+        window.addEventListener("storage", syncSttSettings);
+        window.addEventListener("focus", syncSttSettings);
+        return () => {
+            window.removeEventListener("storage", syncSttSettings);
+            window.removeEventListener("focus", syncSttSettings);
+        };
+    }, []);
 
     const handleTranscription = useCallback((text: string) => {
         const trimmed = text.trim();
@@ -192,6 +205,17 @@ export default function ChatPanel() {
     }, [sttAutoSend, startStreaming, stopStreaming]);
 
     const { state: voiceState, volume: micVolume, partialText: sttPartialText, start: startVoice, stop: stopVoice } = useVoiceInput(handleTranscription);
+
+    // Wake word detection — starts main STT when keyword is heard
+    const wakeWordEnabled = localStorage.getItem("kokoro_wake_word_enabled") === "true";
+    const wakeWord = localStorage.getItem("kokoro_wake_word") || "";
+    useWakeWord({
+        enabled: wakeWordEnabled && sttEnabled && !!wakeWord && voiceState === VoiceState.Idle,
+        wakeWord,
+        onWakeWordDetected: useCallback(() => {
+            startVoice({ autoStopOnSilence: true });
+        }, [startVoice]),
+    });
 
     // Effect: Sync partial STT text to input box for real-time feedback
     useEffect(() => {

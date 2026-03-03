@@ -223,7 +223,8 @@
                 "openai_whisper": "OpenAI Whisper (云端)",
                 "whisper_cpp": "Whisper.cpp (本地)",
                 "faster_whisper": "Faster Whisper (本地)",
-                "local_whisper": "Local Whisper (通用)"
+                "local_whisper": "Local Whisper (通用)",
+                "sensevoice": "SenseVoice (本地)"
             },
             "fields": {
                 "server_url": "服务器地址",
@@ -242,6 +243,11 @@
             "voice_interrupt": {
                 "title": "语音打断",
                 "desc": "说话时打断语音播放"
+            },
+            "wake_word": {
+                "title": "唤醒词",
+                "desc": "检测到关键词时自动开始监听",
+                "placeholder": "例如：你好心音"
             },
             "info": {
                 "openai": "使用 OpenAI Whisper API。需要有效的 API Key。",

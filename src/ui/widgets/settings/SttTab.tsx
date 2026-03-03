@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import { useTranslation } from "react-i18next";
-import { Mic, Languages, Send, HandMetal, Server } from "lucide-react";
+import { Mic, Languages, Send, HandMetal, Server, Wand2 } from "lucide-react";
 import type { SttConfig, SttProviderConfig } from "../../../lib/kokoro-bridge";
 
 interface SttTabProps {
@@ -290,6 +290,51 @@ export default function SttTab({
                                     )}
                                 />
                             </motion.button>
+                        </div>
+
+                        {/* Wake word toggle + input */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Wand2 size={14} strokeWidth={1.5} className="text-[var(--color-text-muted)]" />
+                                    <div>
+                                        <div className="text-sm text-[var(--color-text-primary)]">
+                                            {t("settings.stt.wake_word.title")}
+                                        </div>
+                                        <div className="text-xs text-[var(--color-text-muted)]">
+                                            {t("settings.stt.wake_word.desc")}
+                                        </div>
+                                    </div>
+                                </div>
+                                <motion.button
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => updateConfig({ wake_word_enabled: !sttConfig.wake_word_enabled })}
+                                    className={clsx(
+                                        "w-12 h-6 rounded-full relative transition-colors duration-200",
+                                        sttConfig.wake_word_enabled
+                                            ? "bg-[var(--color-accent)]"
+                                            : "bg-[var(--color-bg-surface)] border border-[var(--color-border)]"
+                                    )}
+                                >
+                                    <motion.div
+                                        animate={{ x: sttConfig.wake_word_enabled ? 24 : 2 }}
+                                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                        className={clsx(
+                                            "w-5 h-5 rounded-full absolute top-0.5",
+                                            sttConfig.wake_word_enabled ? "bg-black" : "bg-[var(--color-text-muted)]"
+                                        )}
+                                    />
+                                </motion.button>
+                            </div>
+                            {sttConfig.wake_word_enabled && (
+                                <input
+                                    type="text"
+                                    value={sttConfig.wake_word || ""}
+                                    onChange={(e) => updateConfig({ wake_word: e.target.value || undefined })}
+                                    placeholder={t("settings.stt.wake_word.placeholder")}
+                                    className="w-full px-3 py-1.5 rounded-md text-sm bg-[var(--color-bg-elevated)] border border-[var(--color-border)] focus:border-[var(--color-accent)] outline-none text-[var(--color-text-primary)]"
+                                />
+                            )}
                         </div>
                     </div>
 

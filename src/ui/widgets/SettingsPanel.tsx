@@ -212,11 +212,9 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
             setTtsProviders(providers);
             setTtsVoices(voices);
             setLocalTtsConfig(ttsConfig);
-            // STT config comes from prop (sttConfigProp), no need to re-fetch
-            if (!localSttConfig && !sttConfigProp) {
-                const sttConfig = await getSttConfig();
-                setLocalSttConfig(sttConfig);
-            }
+            // STT config: always fetch fresh from backend to reflect saved state
+            const sttConfig = await getSttConfig();
+            setLocalSttConfig(sttConfig);
         } catch (e) {
             console.error("[SettingsPanel] Failed to fetch data:", e);
         } finally {
@@ -238,6 +236,8 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
             localStorage.setItem("kokoro_stt_enabled", activeSttProvider?.enabled ? "true" : "false");
             localStorage.setItem("kokoro_stt_auto_send", localSttConfig.auto_send ? "true" : "false");
             localStorage.setItem("kokoro_stt_language", localSttConfig.language || "");
+            localStorage.setItem("kokoro_wake_word_enabled", localSttConfig.wake_word_enabled ? "true" : "false");
+            localStorage.setItem("kokoro_wake_word", localSttConfig.wake_word || "");
         }
         localStorage.setItem("kokoro_voice_interrupt", voiceInterrupt ? "true" : "false");
         localStorage.setItem("kokoro_response_language", responseLang);

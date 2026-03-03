@@ -1,6 +1,7 @@
 pub mod config;
 pub mod interface;
 pub mod openai;
+pub mod sensevoice;
 pub mod service;
 pub mod stream;
 pub mod whisper_cpp;

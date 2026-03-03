@@ -1,5 +1,6 @@
 use crate::stt::config::save_config;
-use crate::stt::{AudioSource, SttConfig, SttService};
+use crate::stt::{AudioChunk, AudioSource, SttConfig, SttService};
+use std::sync::Arc;
 use tauri::command;
 use tauri::State;
 
@@ -24,13 +25,32 @@ pub async fn transcribe_audio(
 }
 
 /// Return the current STT config from disk.
+/// Automatically merges any missing default providers so the UI always shows all options.
 #[command]
 pub async fn get_stt_config() -> Result<SttConfig, String> {
     let app_data = dirs_next::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("com.chyin.kokoro");
     let config_path = app_data.join("stt_config.json");
-    Ok(crate::stt::load_config(&config_path))
+    let mut config = crate::stt::load_config(&config_path);
+
+    // Merge missing default providers so new providers appear in the UI
+    // without requiring users to manually edit stt_config.json.
+    let defaults = crate::stt::config::default_providers_pub();
+    let mut changed = false;
+    for default in defaults {
+        if !config.providers.iter().any(|p| p.id == default.id) {
+            config.providers.push(default);
+            changed = true;
+        }
+    }
+
+    // Write back if we added new providers, so active_provider survives next load
+    if changed {
+        let _ = crate::stt::config::save_config(&config_path, &config);
+    }
+
+    Ok(config)
 }
 
 /// Save STT config to disk and hot-reload providers.
@@ -51,4 +71,28 @@ pub async fn save_stt_config(
     state.reload_from_config(&config).await;
 
     Ok(())
+}
+
+/// Transcribe a short raw PCM audio clip (float32, 16kHz mono) for wake word detection.
+/// Does NOT use the streaming buffer — fire-and-forget one-shot transcription.
+#[command]
+pub async fn transcribe_wake_word_audio(
+    state: State<'_, SttService>,
+    samples: Vec<f32>,
+) -> Result<String, String> {
+    if samples.is_empty() {
+        return Ok(String::new());
+    }
+
+    let chunk = AudioChunk {
+        samples: Arc::new(samples),
+        sample_rate: 16000,
+    };
+
+    let result = state
+        .transcribe(&AudioSource::Chunk(chunk), None)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(result.text)
 }

@@ -45,12 +45,24 @@ pub struct SttConfig {
     #[serde(default)]
     pub auto_send: bool,
 
+    /// Wake word detection enabled
+    #[serde(default)]
+    pub wake_word_enabled: bool,
+
+    /// Wake word string (e.g. "你好心音"). Case-insensitive substring match.
+    #[serde(default)]
+    pub wake_word: Option<String>,
+
     #[serde(default = "default_providers")]
     pub providers: Vec<SttProviderConfig>,
 }
 
 fn default_active_provider() -> String {
     "openai_whisper".to_string()
+}
+
+pub fn default_providers_pub() -> Vec<SttProviderConfig> {
+    default_providers()
 }
 
 fn default_providers() -> Vec<SttProviderConfig> {
@@ -82,6 +94,15 @@ fn default_providers() -> Vec<SttProviderConfig> {
             base_url: Some("http://127.0.0.1:8000/v1".to_string()),
             model: Some("medium".to_string()),
         },
+        SttProviderConfig {
+            id: "sensevoice".to_string(),
+            provider_type: "sensevoice".to_string(),
+            enabled: false,
+            api_key: None,
+            api_key_env: None,
+            base_url: Some("http://127.0.0.1:50000".to_string()),
+            model: None,
+        },
     ]
 }
 
@@ -91,6 +112,8 @@ impl Default for SttConfig {
             active_provider: default_active_provider(),
             language: None,
             auto_send: false,
+            wake_word_enabled: false,
+            wake_word: None,
             providers: default_providers(),
         }
     }
