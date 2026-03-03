@@ -44,7 +44,6 @@ struct ActionEvent {
 #[derive(serde::Deserialize, Debug)]
 struct IntentResponse {
     action_request: Option<String>,
-    emotion_target: Option<String>,
     need_translation: Option<bool>,
     extra_info: Option<String>,
     // Optional: catch-all for system calls if we expand this
@@ -302,7 +301,6 @@ pub async fn stream_chat(
         );
         IntentResponse {
             action_request: None,
-            emotion_target: None,
             need_translation: None,
             extra_info: None,
             system_call: None,
@@ -313,23 +311,8 @@ pub async fn stream_chat(
 
     // ── EXECUTION & STATE UPDATE ────────────────────────────────
 
-    // 1. Emotion Update
-    let (current_expression, _current_mood) = if let Some(emo) = intent.emotion_target {
-        let (new_expr, new_mood) = state.update_emotion(&emo, 0.5).await;
-
-        // Emit immediate visual update
-        window
-            .emit(
-                "chat-expression",
-                ExpressionEvent {
-                    expression: new_expr.clone(),
-                    mood: new_mood,
-                },
-            )
-            .map_err(|e| e.to_string())?;
-        (new_expr, new_mood)
-    } else {
-        // Just get current state
+    // 1. Get current emotion state (emotion is driven by change_expression tool call in main LLM response)
+    let (current_expression, _current_mood) = {
         let emotion_state = state.emotion_state.lock().await;
         (emotion_state.current_emotion().to_string(), emotion_state.mood())
     };
