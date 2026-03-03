@@ -115,7 +115,9 @@ export function drawableHitTest(
         // Triangle-level hit test
         if (!triangleHitTest(verts, indices, mx, my)) continue;
 
-        // Hit! Resolve body region from part name or drawable ID
+        // Hit! This is the front-most (highest render order) drawable at this point.
+        // Stop here — do NOT fall through to deeper layers, which prevents background
+        // meshes (e.g. body) from winning over foreground meshes (e.g. hand).
         const drawableId = drawables.ids[i] ?? "";
         let partName = "";
 
@@ -124,13 +126,9 @@ export function drawableHitTest(
             partName = parts.ids[partIdx] ?? "";
         }
 
-        const region = resolveBodyRegion(partName, drawableId);
-        if (region !== "unknown") {
-            return region;
-        }
-
-        // If this drawable didn't map to a known region, keep searching
-        // (it might be a mask or decoration mesh)
+        // Returns "unknown" if the name doesn't match any region rule.
+        // Caller can distinguish "unknown hit" from "no hit at all" (null).
+        return resolveBodyRegion(partName, drawableId);
     }
 
     return null;

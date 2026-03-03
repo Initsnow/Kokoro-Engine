@@ -252,16 +252,27 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
                     let longPressFired = false;
 
-                    const hitTestFirst = (globalX: number, globalY: number): string => {
-                        // Level 1: Drawable mesh hit test → semantic body region
+                    const hitTestFirst = (globalX: number, globalY: number): string | null => {
+                        // Level 1: Drawable mesh hit test — front-most visible mesh wins.
+                        // null = nothing hit; "unknown" = hit an unrecognised mesh (still on model).
                         const region = drawableHitTest(model, globalX, globalY);
-                        if (region) return REGION_DESCRIPTIONS[region];
+                        if (region !== null) {
+                            return region === "unknown"
+                                ? REGION_DESCRIPTIONS["body"]
+                                : REGION_DESCRIPTIONS[region];
+                        }
 
                         // Level 2: Original HitArea detection (for models that define them)
                         const hits = model.hitTest(globalX, globalY);
                         if (hits.length > 0) return hits[0];
 
-                        // Level 3: Y-coordinate estimation (fallback)
+                        // Level 3: Y-coordinate estimation — only inside model bounds
+                        const bounds = model.getBounds();
+                        const inBounds =
+                            globalX >= bounds.x && globalX <= bounds.x + bounds.width &&
+                            globalY >= bounds.y && globalY <= bounds.y + bounds.height;
+                        if (!inBounds) return null;
+
                         const fallback = estimateRegionByY(model, globalY);
                         return REGION_DESCRIPTIONS[fallback];
                     };
@@ -286,7 +297,8 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
 
                         longPressTimer = setTimeout(() => {
                             longPressFired = true;
-                            handleGesture(hitTestFirst(x, y), "long_press");
+                            const area = hitTestFirst(x, y);
+                            if (area) handleGesture(area, "long_press");
                         }, LONG_PRESS_MS);
                     });
 
@@ -301,7 +313,8 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                         const elapsed = Date.now() - pointerDownTime;
                         if (elapsed < LONG_PRESS_MS) {
                             const { x, y } = e.data.global;
-                            handleGesture(hitTestFirst(x, y), "tap");
+                            const area = hitTestFirst(x, y);
+                            if (area) handleGesture(area, "tap");
                         }
                     });
 
