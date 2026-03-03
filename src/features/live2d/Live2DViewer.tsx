@@ -255,7 +255,7 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                     const hitTestFirst = (globalX: number, globalY: number): string | null => {
                         // Level 1: Drawable mesh hit test — front-most visible mesh wins.
                         // null = nothing hit; "unknown" = hit an unrecognised mesh (still on model).
-                        const region = drawableHitTest(model, globalX, globalY);
+                        const region = drawableHitTest(model, globalX, globalY, import.meta.env.DEV);
                         if (region !== null) {
                             return region === "unknown"
                                 ? REGION_DESCRIPTIONS["body"]

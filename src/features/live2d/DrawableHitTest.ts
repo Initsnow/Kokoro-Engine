@@ -73,6 +73,7 @@ export function drawableHitTest(
     model: Live2DModel,
     globalX: number,
     globalY: number,
+    debug = false,
 ): BodyRegion | null {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const internal = (model as any).internalModel;
@@ -126,9 +127,19 @@ export function drawableHitTest(
             partName = parts.ids[partIdx] ?? "";
         }
 
+        const region = resolveBodyRegion(partName, drawableId);
+
+        if (debug) {
+            console.log(
+                `[HitTest] renderOrder=${drawables.renderOrders[i]}` +
+                ` | part="${partName}" | drawable="${drawableId}"` +
+                ` → region="${region}"`
+            );
+        }
+
         // Returns "unknown" if the name doesn't match any region rule.
         // Caller can distinguish "unknown hit" from "no hit at all" (null).
-        return resolveBodyRegion(partName, drawableId);
+        return region;
     }
 
     return null;
