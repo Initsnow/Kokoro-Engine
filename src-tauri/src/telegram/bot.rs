@@ -733,25 +733,16 @@ fn strip_control_tags(text: &str) -> String {
     result.trim().to_string()
 }
 
-/// Collapse 3+ consecutive newlines into 2 for cleaner Telegram output.
+/// Collapse excessive newlines for cleaner Telegram output.
+/// Removes lines that contain only ellipsis/whitespace, then collapses 2+ newlines to 1.
 fn compact_newlines(text: &str) -> String {
-    let mut result = String::new();
-    let mut newline_count = 0u32;
-    for ch in text.chars() {
-        if ch == '\n' {
-            newline_count += 1;
-        } else {
-            if newline_count > 0 {
-                for _ in 0..newline_count.min(2) {
-                    result.push('\n');
-                }
-                newline_count = 0;
-            }
-            result.push(ch);
-        }
-    }
-    for _ in 0..newline_count.min(2) {
-        result.push('\n');
-    }
-    result.trim().to_string()
+    // Filter out lines that are only whitespace or lone ellipsis fragments
+    let filtered: Vec<&str> = text
+        .lines()
+        .filter(|line| {
+            let t = line.trim().trim_matches('…').trim_matches('.').trim();
+            !t.is_empty()
+        })
+        .collect();
+    filtered.join("\n").trim().to_string()
 }
