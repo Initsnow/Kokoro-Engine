@@ -669,6 +669,40 @@ pub async fn stream_chat(
 
     let full_response = strip_leaked_tags(&all_cleaned_text);
 
+    // Fallback translation: if main LLM missed the [TRANSLATE:...] tag, use system LLM to fill in
+    if all_translations.is_empty() && !full_response.is_empty() {
+        let user_lang = state.user_language.lock().await.clone();
+        let resp_lang = state.response_language.lock().await.clone();
+        println!("[Chat] Fallback check: user_lang={:?}, resp_lang={:?}", user_lang, resp_lang);
+        if !user_lang.is_empty() && !resp_lang.is_empty() && user_lang != resp_lang {
+            println!("[Chat] Translation missing, triggering fallback translation into {}", user_lang);
+            let fallback_messages = vec![
+                crate::llm::openai::Message {
+                    role: "system".to_string(),
+                    content: crate::llm::openai::MessageContent::Text(
+                        format!("You are a translator. Translate the following text into {}. Output only the translation, nothing else.", user_lang)
+                    ),
+                },
+                crate::llm::openai::Message {
+                    role: "user".to_string(),
+                    content: crate::llm::openai::MessageContent::Text(full_response.clone()),
+                },
+            ];
+            match system_provider.chat(fallback_messages, None).await {
+                Ok(translation) => {
+                    let t = translation.trim().to_string();
+                    if !t.is_empty() {
+                        println!("[Chat] Fallback translation succeeded ({} chars)", t.len());
+                        all_translations.push(t);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[Chat] Fallback translation failed: {}", e);
+                }
+            }
+        }
+    }
+
     // Emit combined translation from all rounds
     if !all_translations.is_empty() {
         let combined_translation = all_translations.join(" ");

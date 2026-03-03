@@ -290,6 +290,12 @@ function App() {
       setTelegramConfig(telegram);
     }).catch(err => console.error("[App] Failed to fetch initial configs:", err));
 
+    // Sync language settings to backend on startup
+    const savedResponseLang = localStorage.getItem("kokoro_response_language") || "";
+    const savedUserLang = localStorage.getItem("kokoro_user_language") || "";
+    if (savedResponseLang) setResponseLanguage(savedResponseLang).catch(console.error);
+    if (savedUserLang) setUserLanguage(savedUserLang).catch(console.error);
+
     // These may be slower (file system scans, network)
     listLive2dModels()
       .then(models => setAvailableModels(models))
