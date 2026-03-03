@@ -1,0 +1,55 @@
+name: Feature Request / 功能请求
+description: Suggest a new feature or improvement / 建议新功能或改进
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea? We'd love to hear it! / 有想法？我们很乐意听取！
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 问题
+      description: What problem does this feature solve? / 这个功能解决什么问题？
+      placeholder: I find it frustrating when...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution / 建议方案
+      description: Describe the solution you'd like. / 描述你期望的方案。
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered / 考虑过的替代方案
+      description: Any alternative solutions or features you've considered? / 你考虑过其他方案吗？
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / 涉及领域
+      options:
+        - Live2D / Character
+        - LLM / Chat
+        - TTS (Text-to-Speech)
+        - STT (Speech-to-Text)
+        - Vision
+        - ImageGen
+        - MOD System
+        - MCP
+        - Telegram
+        - UI / UX
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context / 补充信息
+      description: Screenshots, mockups, or references. / 截图、原型图或参考资料。
+    validations:
+      required: false
