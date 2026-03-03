@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { audioPlayer } from "../services";
 import { VoiceInterruptService } from "./voice-interrupt-service";
 
@@ -150,6 +150,12 @@ export class TtsService {
             audioPlayer.stop();
             this.browserTTS.cancel();
             this.stopVoiceInterrupt();
+
+            // Bridge to STT: emit event so ChatPanel can start listening
+            const sttEnabled = localStorage.getItem("kokoro_stt_enabled") === "true";
+            if (sttEnabled) {
+                emit("voice-interrupt-stt", {});
+            }
         });
 
         this.voiceInterrupt.start().catch(err => {

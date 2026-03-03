@@ -208,6 +208,14 @@ export default function ChatPanel() {
 
     const { state: voiceState, volume: micVolume, partialText: sttPartialText, start: startVoice, stop: stopVoice } = useVoiceInput(handleTranscription);
 
+    // Refs to avoid stale closures in the voice-interrupt-stt listener
+    const startVoiceRef = useRef(startVoice);
+    const sttAutoSendRef = useRef(sttAutoSend);
+    const sttEnabledRef = useRef(sttEnabled);
+    useEffect(() => { startVoiceRef.current = startVoice; }, [startVoice]);
+    useEffect(() => { sttAutoSendRef.current = sttAutoSend; }, [sttAutoSend]);
+    useEffect(() => { sttEnabledRef.current = sttEnabled; }, [sttEnabled]);
+
     // Wake word detection — starts main STT when keyword is heard
     const [wakeWordEnabled, setWakeWordEnabled] = useState(() => localStorage.getItem("kokoro_wake_word_enabled") === "true");
     const [wakeWord, setWakeWord] = useState(() => localStorage.getItem("kokoro_wake_word") || "");
@@ -496,6 +504,16 @@ export default function ChatPanel() {
                 translationRef.current = undefined;
             });
             cleanups.push(() => unInteraction());
+
+            // Listen for voice-interrupt-stt: when TTS is interrupted by voice, auto-start STT
+            const unVoiceInterruptStt = await listen<any>("voice-interrupt-stt", () => {
+                if (aborted || isStreamingRef.current) return;
+                if (!sttEnabledRef.current || !sttAutoSendRef.current) return;
+                console.log("[ChatPanel] Voice interrupt → starting STT");
+                startVoiceRef.current({ autoStopOnSilence: true });
+            });
+            if (aborted) { unVoiceInterruptStt(); return; }
+            cleanups.push(() => unVoiceInterruptStt());
         };
 
         setup();
