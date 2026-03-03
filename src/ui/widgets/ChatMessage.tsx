@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import { Edit2, RefreshCw, Check, X, Languages, CornerDownLeft } from "lucide-react";
@@ -21,7 +21,7 @@ interface ChatMessageProps {
     onContinueFrom: () => void;
 }
 
-export function ChatMessage({
+export const ChatMessage = memo(function ChatMessage({
     message: msg,
     isStreaming,
     isTranslationExpanded,
@@ -177,4 +177,4 @@ export function ChatMessage({
             )}
         </motion.div>
     );
-}
+});

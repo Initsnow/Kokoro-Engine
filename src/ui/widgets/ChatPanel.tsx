@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useDeferredValue } from "react";
+import { useState, useRef, useEffect, useCallback, useDeferredValue, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import { Send, Trash2, AlertCircle, MessageCircle, ChevronLeft, ImagePlus, X, Mic, MicOff, History } from "lucide-react";
@@ -60,6 +60,36 @@ function ErrorToast({ message, onDismiss }: { message: string; onDismiss: () => 
 }
 
 // ── Main Component ─────────────────────────────────────────
+// ── MemoizedChatMessage wrapper ───────────────────────────
+interface MemoizedChatMessageProps {
+    message: { role: "user" | "kokoro"; text: string; images?: string[]; translation?: string; isError?: boolean };
+    globalIndex: number;
+    isStreaming: boolean;
+    isTranslationExpanded: boolean;
+    onToggleTranslation: (index: number) => void;
+    onEdit: (index: number, newText: string) => void;
+    onRegenerate: (index: number) => Promise<void>;
+    onContinueFrom: (index: number) => Promise<void>;
+}
+
+const MemoizedChatMessage = memo(function MemoizedChatMessage({
+    message, globalIndex, isStreaming, isTranslationExpanded,
+    onToggleTranslation, onEdit, onRegenerate, onContinueFrom,
+}: MemoizedChatMessageProps) {
+    return (
+        <ChatMessage
+            message={message}
+            index={globalIndex}
+            isStreaming={isStreaming}
+            isTranslationExpanded={isTranslationExpanded}
+            onToggleTranslation={() => onToggleTranslation(globalIndex)}
+            onEdit={(text) => onEdit(globalIndex, text)}
+            onRegenerate={() => onRegenerate(globalIndex)}
+            onContinueFrom={() => onContinueFrom(globalIndex)}
+        />
+    );
+});
+
 export default function ChatPanel() {
     const { t } = useTranslation();
     const [collapsed, setCollapsed] = useState(false);
@@ -634,6 +664,79 @@ export default function ChatPanel() {
         setMessages([]);
     };
 
+    // ── Stable message action callbacks ───────────────────
+    const onToggleTranslation = useCallback((globalIndex: number) => {
+        setExpandedTranslations(prev => {
+            const next = new Set(prev);
+            if (next.has(globalIndex)) next.delete(globalIndex);
+            else next.add(globalIndex);
+            return next;
+        });
+    }, []);
+
+    const onEdit = useCallback((globalIndex: number, newText: string) => {
+        setMessages(prev => {
+            const updated = [...prev];
+            updated[globalIndex] = { ...updated[globalIndex], text: newText };
+            return updated;
+        });
+    }, []);
+
+    const onRegenerate = useCallback(async (globalIndex: number) => {
+        const msgs = messagesRef.current;
+        const lastUserIndex = msgs.slice(0, globalIndex).reverse().findIndex(m => m.role === "user");
+        if (lastUserIndex === -1) return;
+        const userMsgIndex = globalIndex - 1 - lastUserIndex;
+        const userMsg = msgs[userMsgIndex];
+
+        const messagesToDelete = msgs.length - globalIndex;
+        setMessages(prev => prev.slice(0, globalIndex));
+
+        try {
+            await deleteLastMessages(messagesToDelete);
+        } catch (e) {
+            console.error("[ChatPanel] Failed to delete messages:", e);
+        }
+
+        startStreaming();
+        setIsThinking(true);
+        userScrolledRef.current = false;
+        resetReveal();
+        rawResponseRef.current = "";
+        translationRef.current = undefined;
+
+        const allowImageGen = (() => {
+            try {
+                const bgConfig = JSON.parse(localStorage.getItem("kokoro_bg_config") || "{}");
+                return bgConfig.mode === "generated";
+            } catch { return false; }
+        })();
+
+        streamChat({
+            message: userMsg.text,
+            images: userMsg.images,
+            allow_image_gen: allowImageGen,
+            character_id: localStorage.getItem("kokoro_active_character_id") || undefined,
+        }).catch(err => {
+            stopStreaming();
+            setIsThinking(false);
+            setError(err instanceof Error ? err.message : String(err));
+        });
+    }, [startStreaming, stopStreaming, resetReveal, setError]);
+
+    const onContinueFrom = useCallback(async (globalIndex: number) => {
+        const msgs = messagesRef.current;
+        const messagesToDelete = msgs.length - globalIndex - 1;
+        if (messagesToDelete > 0) {
+            setMessages(prev => prev.slice(0, globalIndex + 1));
+            try {
+                await deleteLastMessages(messagesToDelete);
+            } catch (e) {
+                console.error("[ChatPanel] Failed to delete messages:", e);
+            }
+        }
+    }, []);
+
     // ── Expand handler ─────────────────────────────────────
     const handleExpand = () => {
         setCollapsed(false);
@@ -770,76 +873,16 @@ export default function ChatPanel() {
                     {deferredMessages.slice(-visibleCount).map((msg, i) => {
                         const globalIndex = Math.max(0, messages.length - visibleCount) + i;
                         return (
-                            <ChatMessage
+                            <MemoizedChatMessage
                                 key={`${globalIndex}-${msg.role}`}
                                 message={msg}
-                                index={globalIndex}
+                                globalIndex={globalIndex}
                                 isStreaming={isStreaming}
                                 isTranslationExpanded={expandedTranslations.has(globalIndex)}
-                                onToggleTranslation={() => {
-                                    setExpandedTranslations(prev => {
-                                        const next = new Set(prev);
-                                        if (next.has(globalIndex)) next.delete(globalIndex);
-                                        else next.add(globalIndex);
-                                        return next;
-                                    });
-                                }}
-                                onEdit={async (newText) => {
-                                    const updatedMessages = [...messages];
-                                    updatedMessages[globalIndex] = { ...msg, text: newText };
-                                    setMessages(updatedMessages);
-                                }}
-                                onRegenerate={async () => {
-                                    const lastUserIndex = messages.slice(0, globalIndex).reverse().findIndex(m => m.role === "user");
-                                    if (lastUserIndex === -1) return;
-                                    const userMsgIndex = globalIndex - 1 - lastUserIndex;
-                                    const userMsg = messages[userMsgIndex];
-
-                                    const messagesToDelete = messages.length - globalIndex;
-                                    setMessages(prev => prev.slice(0, globalIndex));
-
-                                    try {
-                                        await deleteLastMessages(messagesToDelete);
-                                    } catch (e) {
-                                        console.error("[ChatPanel] Failed to delete messages:", e);
-                                    }
-
-                                    startStreaming();
-                                    setIsThinking(true);
-                                    userScrolledRef.current = false;
-                                    resetReveal();
-                                    rawResponseRef.current = "";
-                                    translationRef.current = undefined;
-
-                                    const allowImageGen = (() => {
-                                        try {
-                                            const bgConfig = JSON.parse(localStorage.getItem("kokoro_bg_config") || "{}");
-                                            return bgConfig.mode === "generated";
-                                        } catch { return false; }
-                                    })();
-
-                                    streamChat({
-                                        message: userMsg.text,
-                                        images: userMsg.images,
-                                        allow_image_gen: allowImageGen,
-                                        character_id: localStorage.getItem("kokoro_active_character_id") || undefined,
-                                    }).catch(err => {
-                                        stopStreaming();
-                                        setIsThinking(false);
-                                        setError(err instanceof Error ? err.message : String(err));
-                                    });
-                                }}
-                                onContinueFrom={async () => {
-                                    const messagesToDelete = messages.length - globalIndex - 1;
-                                    if (messagesToDelete > 0) {
-                                        setMessages(prev => prev.slice(0, globalIndex + 1));
-                                        try {
-                                            await deleteLastMessages(messagesToDelete);
-                                        } catch (e) {
-                                            console.error("[ChatPanel] Failed to delete messages:", e);
-                                        }
-                                    }
-                                }}
+                                onToggleTranslation={onToggleTranslation}
+                                onEdit={onEdit}
+                                onRegenerate={onRegenerate}
+                                onContinueFrom={onContinueFrom}
                             />
                         );
                     })}
