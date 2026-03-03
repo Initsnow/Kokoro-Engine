@@ -91,7 +91,6 @@ struct ActionEvent {
 #[derive(serde::Deserialize, Debug)]
 struct IntentResponse {
     action_request: Option<String>,
-    need_translation: Option<bool>,
     extra_info: Option<String>,
     // Optional: catch-all for system calls if we expand this
     #[serde(default)]
@@ -348,7 +347,6 @@ pub async fn stream_chat(
         );
         IntentResponse {
             action_request: None,
-            need_translation: None,
             extra_info: None,
             system_call: None,
         }
@@ -401,11 +399,9 @@ pub async fn stream_chat(
         "(Internal System Note)\n\
         - State Updated: Emotion is now '{}'.\n\
         - Action Performed: {}.\n\
-        - Translation Needed: {}.\n\
         Continue the dialogue naturally based on this state. Do NOT explicitly mention the system update.",
         current_expression,
         intent.action_request.as_deref().unwrap_or("None"),
-        intent.need_translation.map(|b| b.to_string()).unwrap_or("false".to_string())
     );
 
     // ── LAYER 3: PERSONA GENERATION ─────────────────────────────

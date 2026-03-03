@@ -5,13 +5,11 @@ Return JSON only. No explanation.
 Schema:
 {
   "action_request": null | "move_model" | "play_animation" | "system_call" | "other",
-  "need_translation": true | false,
   "extra_info": string | null
 }
 
 Rules:
 - "action_request" is for explicit system commands only (move model, play animation, etc).
-- "need_translation" is true only if the user is asking for a translation.
 - Character emotion is handled exclusively by the main LLM response. Do NOT infer or set emotion here."#;
 
 pub const BG_IMAGE_ANALYZER_PROMPT: &str = r#"You are a background scene analyzer for a virtual character chat application.
