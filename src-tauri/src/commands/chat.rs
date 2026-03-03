@@ -900,3 +900,141 @@ pub async fn stream_chat(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── extract_translate_tags ──────────────────────────────
+
+    #[test]
+    fn test_extract_translate_tags_basic() {
+        let input = "こんにちは[TRANSLATE:你好]";
+        let (text, translation) = extract_translate_tags(input);
+        assert_eq!(text, "こんにちは");
+        assert_eq!(translation, Some("你好".to_string()));
+    }
+
+    #[test]
+    fn test_extract_translate_tags_none() {
+        let input = "こんにちは";
+        let (text, translation) = extract_translate_tags(input);
+        assert_eq!(text, "こんにちは");
+        assert_eq!(translation, None);
+    }
+
+    #[test]
+    fn test_extract_translate_tags_multiple() {
+        let input = "A[TRANSLATE:甲] B[TRANSLATE:乙]";
+        let (text, translation) = extract_translate_tags(input);
+        assert_eq!(text, "AB");
+        assert_eq!(translation, Some("甲 乙".to_string()));
+    }
+
+    #[test]
+    fn test_extract_translate_tags_unclosed() {
+        let input = "hello[TRANSLATE:world";
+        let (text, translation) = extract_translate_tags(input);
+        assert_eq!(text, "hello");
+        assert_eq!(translation, Some("world".to_string()));
+    }
+
+    #[test]
+    fn test_extract_translate_tags_empty_content() {
+        let input = "hello[TRANSLATE:]world";
+        let (text, translation) = extract_translate_tags(input);
+        assert_eq!(text, "helloworld");
+        assert_eq!(translation, None);
+    }
+
+    // ── strip_translate_tags ────────────────────────────────
+
+    #[test]
+    fn test_strip_translate_tags() {
+        let input = "こんにちは[TRANSLATE:你好]";
+        assert_eq!(strip_translate_tags(input), "こんにちは");
+    }
+
+    #[test]
+    fn test_strip_translate_tags_no_tag() {
+        let input = "こんにちは";
+        assert_eq!(strip_translate_tags(input), "こんにちは");
+    }
+
+    // ── strip_leaked_tags ───────────────────────────────────
+
+    #[test]
+    fn test_strip_leaked_tags_removes_tool_result() {
+        let input = "before<tool_result>leaked data</tool_result>after";
+        assert_eq!(strip_leaked_tags(input), "beforeafter");
+    }
+
+    #[test]
+    fn test_strip_leaked_tags_unclosed() {
+        let input = "before<tool_result>leaked\nafter";
+        assert_eq!(strip_leaked_tags(input), "before\nafter");
+    }
+
+    #[test]
+    fn test_strip_leaked_tags_no_tag() {
+        let input = "clean text";
+        assert_eq!(strip_leaked_tags(input), "clean text");
+    }
+
+    // ── find_safe_emit_boundary ─────────────────────────────
+
+    #[test]
+    fn test_safe_emit_boundary_no_bracket() {
+        let text = "hello world";
+        assert_eq!(find_safe_emit_boundary(text), text.len());
+    }
+
+    #[test]
+    fn test_safe_emit_boundary_partial_tool_call() {
+        let text = "hello [TOOL_CA";
+        let boundary = find_safe_emit_boundary(text);
+        assert_eq!(boundary, "hello ".len());
+    }
+
+    #[test]
+    fn test_safe_emit_boundary_partial_translate() {
+        let text = "hello [TRANS";
+        let boundary = find_safe_emit_boundary(text);
+        assert_eq!(boundary, "hello ".len());
+    }
+
+    #[test]
+    fn test_safe_emit_boundary_unrelated_bracket() {
+        let text = "hello [world]";
+        assert_eq!(find_safe_emit_boundary(text), text.len());
+    }
+
+    // ── parse_tool_call_tags ────────────────────────────────
+
+    #[test]
+    fn test_parse_tool_call_basic() {
+        let input = "text[TOOL_CALL:change_expression|expression=happy]more";
+        let (cleaned, calls) = parse_tool_call_tags(input);
+        assert_eq!(cleaned.trim(), "textmore");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "change_expression");
+        assert_eq!(calls[0].args.get("expression"), Some(&"happy".to_string()));
+    }
+
+    #[test]
+    fn test_parse_tool_call_no_tag() {
+        let input = "just text";
+        let (cleaned, calls) = parse_tool_call_tags(input);
+        assert_eq!(cleaned, "just text");
+        assert!(calls.is_empty());
+    }
+
+    #[test]
+    fn test_parse_tool_call_multiple_args() {
+        let input = "[TOOL_CALL:set_background|prompt=beach|style=anime]";
+        let (_, calls) = parse_tool_call_tags(input);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].args.get("prompt"), Some(&"beach".to_string()));
+        assert_eq!(calls[0].args.get("style"), Some(&"anime".to_string()));
+    }
+}
