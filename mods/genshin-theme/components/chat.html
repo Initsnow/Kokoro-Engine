@@ -732,22 +732,6 @@
                         btn.addEventListener('click', () => sendMessage(text));
                         optionsArea.appendChild(btn);
                     });
-
-                    // Custom input option
-                    const customBtn = document.createElement('button');
-                    customBtn.className = 'option-btn custom-input';
-                    customBtn.innerHTML = `
-                        <span class="option-dots">
-                            <span class="dot"></span>
-                            <span class="dot"></span>
-                            <span class="dot"></span>
-                        </span>
-                        <span class="option-text">自定义输入</span>
-                    `;
-                    customBtn.addEventListener('click', () => {
-                        inputField.focus();
-                    });
-                    optionsArea.appendChild(customBtn);
                 }
             }
 
