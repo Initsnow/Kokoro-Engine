@@ -870,10 +870,10 @@ function App() {
         whileHover={{ scale: 1.1, rotate: 30 }}
         whileTap={{ scale: 0.9 }}
         onClick={() => setSettingsOpen(true)}
-        className="fixed top-4 right-4 z-50 p-2.5 rounded-lg bg-[var(--color-bg-surface)] backdrop-blur-[var(--glass-blur)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] shadow-lg transition-colors"
+        className="fixed top-4 right-4 z-50 p-3 rounded-full bg-[var(--color-bg-surface)] backdrop-blur-[var(--glass-blur)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] shadow-lg transition-colors"
         aria-label="Open settings"
       >
-        <Settings size={18} strokeWidth={1.5} />
+        <Settings size={20} strokeWidth={1.5} />
       </motion.button>
 
       {/* SettingsPanel is retrieved from registry to allow mod overrides */}
