@@ -139,6 +139,7 @@ export default function ChatPanel() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const userScrolledRef = useRef(false);
+    const isProgrammaticScrollRef = useRef(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     // Store last failed request for retry
     const lastFailedRequestRef = useRef<{ message: string; images?: string[]; allowImageGen?: boolean } | null>(null);
@@ -295,13 +296,18 @@ export default function ChatPanel() {
     // ── Auto-scroll ────────────────────────────────────────
     const scrollToBottom = useCallback(() => {
         if (!userScrolledRef.current) {
-            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            isProgrammaticScrollRef.current = true;
+            messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+            // Release flag after scroll event fires
+            setTimeout(() => { isProgrammaticScrollRef.current = false; }, 50);
         }
     }, []);
 
-    useEffect(scrollToBottom, [deferredMessages, scrollToBottom]);
+    useEffect(scrollToBottom, [messages, scrollToBottom]);
 
     const handleScroll = useCallback(() => {
+        // Ignore scroll events triggered by our own scrollToBottom
+        if (isProgrammaticScrollRef.current) return;
         const container = messagesContainerRef.current;
         if (!container) return;
         const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
