@@ -329,7 +329,9 @@ export default function ChatPanel() {
                 setUnreadCount(prev => prev + 1);
             }
         }
-    }, [messages.length, collapsed]);
+    // Only fire when a new message arrives, not when collapsed state changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messages.length]);
 
     // Sync messages ref for use in event callbacks (avoids stale closure)
     useEffect(() => {
