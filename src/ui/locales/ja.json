@@ -564,6 +564,7 @@
         "input": {
             "placeholder": "話しかけてください...",
             "attach_image": "画像を添付",
+            "expand": "入力欄を展開",
             "mic": {
                 "start": "音声入力を開始",
                 "listening": "聞き取り中... (クリックで停止)",

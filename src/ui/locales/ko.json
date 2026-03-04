@@ -564,6 +564,7 @@
         "input": {
             "placeholder": "대화를 시작하세요...",
             "attach_image": "이미지 첨부",
+            "expand": "입력창 확장",
             "mic": {
                 "start": "음성 입력 시작",
                 "listening": "듣는 중... (클릭하여 중지)",

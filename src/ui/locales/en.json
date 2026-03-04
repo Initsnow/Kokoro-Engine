@@ -565,6 +565,7 @@
         "input": {
             "placeholder": "Speak to your companion...",
             "attach_image": "Attach image",
+            "expand": "Expand input",
             "mic": {
                 "start": "Start voice input",
                 "listening": "Listening... (click to stop)",

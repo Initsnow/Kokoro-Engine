@@ -565,6 +565,7 @@
         "input": {
             "placeholder": "与你的同伴对话...",
             "attach_image": "发送图片",
+                "expand": "展开输入框",
             "mic": {
                 "start": "开始语音输入",
                 "listening": "正在聆听... (点击停止)",
