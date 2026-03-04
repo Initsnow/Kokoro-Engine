@@ -62,10 +62,9 @@ pub async fn run_polling(
 
     // Wait for shutdown signal
     let _ = shutdown_rx.await;
-    shutdown_token
-        .shutdown()
-        .expect("Failed to shutdown dispatcher")
-        .await;
+    if let Ok(fut) = shutdown_token.shutdown() {
+        fut.await;
+    };
 }
 
 /// Central message handler — dispatches commands and regular messages.

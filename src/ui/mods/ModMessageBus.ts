@@ -11,13 +11,13 @@ export interface ModBusMessage {
 }
 
 class ModMessageBus {
-    /** Map of component slot name → iframe contentWindow */
-    private windows = new Map<string, Window>();
+    /** Map of component slot name → { window, origin } */
+    private windows = new Map<string, { win: Window; origin: string }>();
 
     /** Register an iframe's contentWindow for a given component name. */
-    register(name: string, win: Window) {
-        this.windows.set(name, win);
-        console.log(`[ModMessageBus] Registered component '${name}'`);
+    register(name: string, win: Window, origin = '*') {
+        this.windows.set(name, { win, origin });
+        console.log(`[ModMessageBus] Registered component '${name}' (origin: ${origin})`);
     }
 
     /** Unregister a component by name. */
@@ -28,9 +28,9 @@ class ModMessageBus {
 
     /** Send a message to a specific component iframe. */
     send(name: string, message: ModBusMessage) {
-        const win = this.windows.get(name);
-        if (win) {
-            win.postMessage(message, "*");
+        const entry = this.windows.get(name);
+        if (entry) {
+            entry.win.postMessage(message, entry.origin);
         } else {
             console.warn(`[ModMessageBus] No iframe registered for component '${name}'`);
         }
@@ -38,8 +38,8 @@ class ModMessageBus {
 
     /** Broadcast a message to all registered mod iframes. */
     broadcast(message: ModBusMessage) {
-        for (const win of this.windows.values()) {
-            win.postMessage(message, "*");
+        for (const { win, origin } of this.windows.values()) {
+            win.postMessage(message, origin);
         }
     }
 

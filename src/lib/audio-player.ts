@@ -86,9 +86,12 @@ export class AudioStreamManager {
         }
         this._isPlaying = false;
 
-        // Don't stop analysis loop, just let it report 0
-        // Or stop it to save resources? 
-        // Let's keep reporting 0 for a moment to ensure UI resets
+        // Cancel the RAF loop to stop wasting CPU when nothing is playing
+        if (this.animationFrameId !== undefined) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = undefined;
+        }
+
         this.broadcastAnalysis({ amplitude: 0, lowFreqEnergy: 0, highFreqEnergy: 0 });
         this.broadcastPlayState(false);
     }

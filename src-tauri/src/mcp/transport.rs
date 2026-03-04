@@ -69,7 +69,10 @@ pub trait McpTransport: Send + Sync {
 
 /// Spawns MCP server as subprocess, communicates via stdin/stdout JSON-RPC.
 pub struct StdioTransport {
-    sender: mpsc::Sender<(JsonRpcRequest, oneshot::Sender<Result<Value, String>>)>,
+    /// Channel carries (raw JSON body, optional responder).
+    /// Requests include Some(responder) and have an "id" field.
+    /// Notifications include None and have no "id" field.
+    sender: mpsc::Sender<(Value, Option<oneshot::Sender<Result<Value, String>>>)>,
     next_id: AtomicU64,
     connected: Arc<std::sync::atomic::AtomicBool>,
     child: Arc<Mutex<Option<Child>>>,
@@ -120,9 +123,10 @@ impl StdioTransport {
         let connected = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let connected_clone = connected.clone();
 
-        // Channel for sending requests from any thread
+        // Channel for sending requests/notifications from any thread.
+        // Tuple: (serialized JSON body, optional responder — None for notifications)
         let (tx, mut rx) =
-            mpsc::channel::<(JsonRpcRequest, oneshot::Sender<Result<Value, String>>)>(64);
+            mpsc::channel::<(Value, Option<oneshot::Sender<Result<Value, String>>>)>(64);
 
         // Pending response map — shared between writer and reader
         let pending: Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>> =
@@ -130,16 +134,19 @@ impl StdioTransport {
         let pending_writer = pending.clone();
         let pending_reader = pending.clone();
 
-        // ── Writer task: receives requests from channel, writes to stdin ──
+        // ── Writer task: receives requests/notifications from channel, writes to stdin ──
         let mut stdin = stdin;
         let pending_cleanup = pending.clone();
         tokio::spawn(async move {
-            while let Some((request, responder)) = rx.recv().await {
-                // Store responder for this request ID
-                pending_writer.lock().await.insert(request.id, responder);
+            while let Some((body, responder)) = rx.recv().await {
+                // Only register a pending responder for requests (not notifications)
+                if let Some(resp) = responder {
+                    let id = body["id"].as_u64().unwrap_or(0);
+                    pending_writer.lock().await.insert(id, resp);
+                }
 
                 // Serialize and write
-                let mut line = serde_json::to_string(&request).unwrap_or_default();
+                let mut line = serde_json::to_string(&body).unwrap_or_default();
                 line.push('\n');
 
                 if let Err(e) = stdin.write_all(line.as_bytes()).await {
@@ -240,16 +247,18 @@ impl McpTransport for StdioTransport {
         }
 
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let request = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            id,
-            method: method.to_string(),
-            params,
-        };
+        let mut body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+        });
+        if let Some(p) = params {
+            body["params"] = p;
+        }
 
         let (tx, rx) = oneshot::channel();
         self.sender
-            .send((request, tx))
+            .send((body, Some(tx)))
             .await
             .map_err(|_| "Transport channel closed".to_string())?;
 
@@ -265,19 +274,17 @@ impl McpTransport for StdioTransport {
             return Err("Transport disconnected".to_string());
         }
 
-        // JSON-RPC 通知没有 id 字段，也不需要等待响应
-        // 通过 sender channel 发送，使用一个不会被读取的 responder
-        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let request = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            id,
-            method: method.to_string(),
-            params,
-        };
+        // JSON-RPC 通知：无 id 字段，无需等待响应，不进 pending map
+        let mut body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": method,
+        });
+        if let Some(p) = params {
+            body["params"] = p;
+        }
 
-        let (tx, _rx) = oneshot::channel();
         self.sender
-            .send((request, tx))
+            .send((body, None))
             .await
             .map_err(|_| "Transport channel closed".to_string())?;
 

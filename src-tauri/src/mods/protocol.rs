@@ -95,14 +95,17 @@ pub fn handle_mod_request<R: tauri::Runtime>(
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 .header("Access-Control-Allow-Headers", "*")
-                // Permissive CSP for mod HTML — mods need full flexibility
+                // CSP for mod HTML — allows inline styles/scripts and local resources,
+                // but restricts network access to prevent data exfiltration.
+                // unsafe-eval is intentionally excluded; mods should not need it.
                 .header(
                     "Content-Security-Policy",
-                    "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; \
+                    "default-src 'self' mod: data: blob: 'unsafe-inline'; \
                      img-src * data: blob:; \
-                     media-src * data: blob:; \
-                     script-src * 'unsafe-inline' 'unsafe-eval'; \
-                     style-src * 'unsafe-inline';",
+                     media-src 'self' mod: data: blob:; \
+                     script-src 'self' mod: 'unsafe-inline'; \
+                     style-src 'self' mod: 'unsafe-inline'; \
+                     connect-src 'self' mod: http://localhost https://localhost ws://localhost wss://localhost;",
                 )
                 .body(body)
                 .unwrap()

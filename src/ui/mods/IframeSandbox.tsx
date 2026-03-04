@@ -70,6 +70,42 @@ async function convertBlobUrls(obj: unknown): Promise<unknown> {
     return obj;
 }
 
+// Commands MODs are allowed to invoke via the host proxy.
+// Add entries here when new MOD-facing APIs are needed.
+const ALLOWED_MOD_COMMANDS = new Set([
+    // MOD lifecycle & events
+    'dispatch_mod_event',
+    'load_mod',
+    'unload_mod',
+    'list_mods',
+    'get_mod_theme',
+    'get_mod_layout',
+    'install_mod',
+    // Character state (read-only)
+    'get_character_state',
+    'get_engine_info',
+    // Expression / motion control
+    'set_expression',
+    'play_motion',
+    // Settings (scoped to MOD namespace)
+    'get_mod_setting',
+    'set_mod_setting',
+    // Chat (send only — no history access)
+    'mod_send_message',
+    // Conversation history
+    'list_conversations',
+    'load_conversation',
+    'delete_conversation',
+    'create_conversation',
+    // Jailbreak prompt (settings page)
+    'get_jailbreak_prompt',
+    'set_jailbreak_prompt',
+    // TTS utilities
+    'convert_singing',
+    // Dialog (file picker)
+    'plugin:dialog|open',
+]);
+
 export const IframeSandbox = ({
     src,
     id,
@@ -79,6 +115,9 @@ export const IframeSandbox = ({
 }: IframeSandboxProps) => {
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const readyRef = useRef(false);
+    // Store the iframe's actual origin once it sends 'ready', so we can use
+    // a specific target origin instead of '*' in outgoing postMessages.
+    const iframeOriginRef = useRef<string>('*');
 
     // Store volatile callbacks/props in refs to avoid re-triggering the
     // message-listener useEffect (which would unregister & re-register
@@ -116,7 +155,8 @@ export const IframeSandbox = ({
             safe.payload = await convertBlobUrls(safe.payload);
         }
 
-        iframeRef.current?.contentWindow?.postMessage(safe, '*');
+        // Use the captured iframe origin instead of '*' to prevent message leakage
+        iframeRef.current?.contentWindow?.postMessage(safe, iframeOriginRef.current);
     }, []);
 
     // Forward prop updates to iframe
@@ -138,15 +178,17 @@ export const IframeSandbox = ({
             switch (msg.type) {
                 case 'ready':
                     readyRef.current = true;
-                    // Register this iframe with the message bus
+                    // Capture the iframe's origin for targeted postMessage
+                    iframeOriginRef.current = event.origin || '*';
+                    // Register this iframe with the message bus (pass origin for safe postMessage)
                     if (iframeRef.current?.contentWindow) {
-                        modMessageBus.register(id, iframeRef.current.contentWindow);
+                        modMessageBus.register(id, iframeRef.current.contentWindow, iframeOriginRef.current);
                     }
                     // Send initial props once iframe is ready
                     if (componentPropsRef.current) {
                         sendToIframe({ type: 'prop-update', payload: componentPropsRef.current });
                     }
-                    console.log(`[ModFrame ${id}] Component ready`);
+                    console.log(`[ModFrame ${id}] Component ready (origin: ${event.origin})`);
                     break;
 
                 case 'event':
@@ -188,8 +230,17 @@ export const IframeSandbox = ({
                     } | undefined;
 
                     if (invokePayload?.command && invokePayload?.id) {
-                        // Route plugin:dialog|open through the dialog API
                         const cmd = invokePayload.command;
+
+                        // Security: only allow whitelisted commands
+                        if (!ALLOWED_MOD_COMMANDS.has(cmd)) {
+                            iframeRef.current?.contentWindow?.postMessage({
+                                type: 'invoke-result',
+                                payload: { id: invokePayload.id, error: `Command '${cmd}' is not permitted for MODs` },
+                            }, iframeOriginRef.current);
+                            break;
+                        }
+
                         let promise: Promise<unknown>;
 
                         if (cmd === 'plugin:dialog|open') {
@@ -208,13 +259,13 @@ export const IframeSandbox = ({
                                 iframeRef.current?.contentWindow?.postMessage({
                                     type: 'invoke-result',
                                     payload: { id: invokePayload.id, result },
-                                }, '*');
+                                }, iframeOriginRef.current);
                             })
                             .catch((err) => {
                                 iframeRef.current?.contentWindow?.postMessage({
                                     type: 'invoke-result',
                                     payload: { id: invokePayload.id, error: String(err) },
-                                }, '*');
+                                }, iframeOriginRef.current);
                             });
                     }
                     break;
