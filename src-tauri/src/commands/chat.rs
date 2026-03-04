@@ -72,6 +72,7 @@ pub struct ChatRequest {
 }
 
 #[derive(Serialize, Clone)]
+#[allow(dead_code)]
 struct ExpressionEvent {
     expression: String,
     mood: f32,
