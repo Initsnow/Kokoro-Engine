@@ -87,13 +87,17 @@
 
         /* ── Right-side Options Area ───────────────────── */
         .options-area {
+            position: fixed;
+            right: 15%;
+            bottom: calc(37% + 52px);
+            width: 280px;
             display: flex;
             flex-direction: column;
             align-items: flex-start;
             gap: 6px;
-            padding: 0 24px 8px;
             max-height: 40vh;
             overflow-y: auto;
+            z-index: 10;
         }
 
         .option-btn {
