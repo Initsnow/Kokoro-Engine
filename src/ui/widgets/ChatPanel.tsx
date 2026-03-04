@@ -304,8 +304,8 @@ export default function ChatPanel() {
         }
     }, []);
 
-    // Fire on both messages (immediate) and deferredMessages (after DOM update)
-    useEffect(scrollToBottom, [messages, scrollToBottom]);
+    // Only fire after deferredMessages — DOM is actually updated at this point.
+    // Firing on `messages` scrolls to the old DOM height (before new bubble renders).
     useEffect(scrollToBottom, [deferredMessages, scrollToBottom]);
 
     const handleScroll = useCallback(() => {
@@ -582,6 +582,9 @@ export default function ChatPanel() {
         startStreaming();
         setIsThinking(true);
         userScrolledRef.current = false;
+        // Lock out handleScroll until deferredMessages DOM update settles (~200ms)
+        isProgrammaticScrollRef.current = true;
+        setTimeout(() => { isProgrammaticScrollRef.current = false; }, 200);
         resetReveal();
         rawResponseRef.current = "";
         translationRef.current = undefined;
