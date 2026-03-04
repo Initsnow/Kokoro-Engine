@@ -306,7 +306,7 @@
         }
 
         .gi-slider-val {
-            font-family: monospace;
+            font-family: var(--gi-font-serif);
             font-size: 12px;
             width: 32px;
             text-align: right;
@@ -2427,7 +2427,7 @@
 
                     const textarea = document.createElement('textarea');
                     textarea.className = 'gi-textarea';
-                    textarea.style.fontFamily = 'monospace';
+                    textarea.style.fontFamily = 'var(--gi-font-serif)';
                     textarea.style.fontSize = '11px';
                     textarea.style.minHeight = '120px';
                     textarea.value = _mcpJsonInput;
