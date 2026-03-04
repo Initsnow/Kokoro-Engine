@@ -883,7 +883,7 @@ export default function ChatPanel() {
             >
                 <AnimatePresence initial={false}>
                     {deferredMessages.slice(-visibleCount).map((msg, i) => {
-                        const globalIndex = Math.max(0, messages.length - visibleCount) + i;
+                        const globalIndex = Math.max(0, deferredMessages.length - visibleCount) + i;
                         return (
                             <MemoizedChatMessage
                                 key={`${globalIndex}-${msg.role}`}
