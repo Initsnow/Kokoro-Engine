@@ -865,16 +865,18 @@ export interface ImportOptions {
     import_database: boolean;
     import_configs: boolean;
     conflict_strategy: "skip" | "overwrite";
+    target_character_id?: string;
 }
 
 export interface ImportResult {
     imported_memories: number;
     imported_conversations: number;
     imported_configs: number;
+    characters_json?: string;
 }
 
-export async function exportData(exportPath: string): Promise<ExportResult> {
-    return invoke<ExportResult>("export_data", { exportPath });
+export async function exportData(exportPath: string, charactersJson?: string): Promise<ExportResult> {
+    return invoke<ExportResult>("export_data", { exportPath, charactersJson });
 }
 
 export async function previewImport(filePath: string): Promise<ImportPreview> {

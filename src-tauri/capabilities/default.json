@@ -11,6 +11,7 @@
     "dialog:default",
     "fs:default",
     "fs:allow-read-text-file",
-    "fs:allow-exists"
+    "fs:allow-exists",
+    "process:allow-restart"
   ]
 }

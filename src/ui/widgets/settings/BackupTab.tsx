@@ -4,8 +4,11 @@ import { clsx } from 'clsx';
 import { Download, Upload, Loader2, Check, AlertTriangle, Database, FileJson } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { save, open } from '@tauri-apps/plugin-dialog';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { exportData, previewImport, importData } from '../../../lib/kokoro-bridge';
-import type { ImportPreview, ImportOptions } from '../../../lib/kokoro-bridge';
+import type { ImportPreview } from '../../../lib/kokoro-bridge';
+import { characterDb } from '../../../lib/db';
+import type { CharacterProfile } from '../../../lib/db';
 import { sectionHeadingClasses } from '../../styles/settings-primitives';
 
 function formatBytes(bytes: number): string {
@@ -45,7 +48,28 @@ export const BackupTab: React.FC = () => {
             });
             if (!filePath) { setExporting(false); return; }
 
-            const result = await exportData(filePath);
+            // 序列化角色数据（头像 Blob 转 base64）+ 用户资料
+            const chars = await characterDb.getAll();
+            const charsSerializable = await Promise.all(chars.map(async (c) => {
+                if (c.avatarBlob) {
+                    const buf = await c.avatarBlob.arrayBuffer();
+                    const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+                    return { ...c, avatarBlob: undefined, avatarB64: b64 };
+                }
+                return { ...c, avatarBlob: undefined };
+            }));
+            const payload = {
+                characters: charsSerializable,
+                activeCharacterId: localStorage.getItem('kokoro_active_character_id'),
+                userName: localStorage.getItem('kokoro_user_name'),
+                userPersona: localStorage.getItem('kokoro_user_persona'),
+                userLanguage: localStorage.getItem('kokoro_user_language'),
+                responseLanguage: localStorage.getItem('kokoro_response_language'),
+                voiceInterrupt: localStorage.getItem('kokoro_voice_interrupt'),
+            };
+            const charactersJson = JSON.stringify(payload);
+
+            const result = await exportData(filePath, charactersJson);
             setExportResult({
                 size: formatBytes(result.size_bytes),
                 stats: t('settings.backup.export_stats', {
@@ -88,18 +112,78 @@ export const BackupTab: React.FC = () => {
         setImportError(null);
         setImportDone(null);
         try {
-            const options: ImportOptions = {
+            // Phase 1: 先恢复角色到 IndexedDB，拿到新 ID
+            let targetCharacterId: string | undefined;
+            let previewResult: Awaited<ReturnType<typeof previewImport>> | null = null;
+            try {
+                previewResult = await previewImport(importFilePath);
+            } catch (_) {}
+
+            if (previewResult?.has_database) {
+                // 先做一次预提取 characters_json（通过临时 importData 调用不行，改为在后端 preview 时也返回）
+                // 实际上 characters_json 在 importData 返回，所以先调用一次只提取角色
+            }
+
+            // 先调用 importData 不带 target_character_id，拿到 characters_json
+            const firstPass = await importData(importFilePath, {
+                import_database: false,
+                import_configs: false,
+                conflict_strategy: conflictStrategy,
+            });
+
+            if (firstPass.characters_json) {
+                try {
+                    const payload = JSON.parse(firstPass.characters_json);
+                    const chars: (Omit<CharacterProfile, 'avatarBlob'> & { avatarB64?: string })[] =
+                        payload.characters ?? payload; // 兼容旧格式
+
+                    // 恢复用户资料 localStorage
+                    if (payload.userName != null) localStorage.setItem('kokoro_user_name', payload.userName);
+                    if (payload.userPersona != null) localStorage.setItem('kokoro_user_persona', payload.userPersona);
+                    if (payload.userLanguage != null) localStorage.setItem('kokoro_user_language', payload.userLanguage);
+                    if (payload.responseLanguage != null) localStorage.setItem('kokoro_response_language', payload.responseLanguage);
+                    if (payload.voiceInterrupt != null) localStorage.setItem('kokoro_voice_interrupt', payload.voiceInterrupt);
+
+                    // 清空现有角色，写入备份角色
+                    const existing = await characterDb.getAll();
+                    for (const c of existing) {
+                        if (c.id !== undefined) await characterDb.remove(c.id);
+                    }
+                    for (const c of chars) {
+                        let avatarBlob: Blob | undefined;
+                        if (c.avatarB64) {
+                            const bytes = Uint8Array.from(atob(c.avatarB64), ch => ch.charCodeAt(0));
+                            avatarBlob = new Blob([bytes]);
+                        }
+                        const { avatarB64, id, ...rest } = c;
+                        const newId = await characterDb.add({ ...rest, avatarBlob });
+                        if (targetCharacterId === undefined) {
+                            targetCharacterId = String(newId);
+                        }
+                    }
+                    if (targetCharacterId) {
+                        localStorage.setItem('kokoro_active_character_id', targetCharacterId);
+                    }
+                } catch (e) {
+                    console.error('[Backup] Failed to restore characters:', e);
+                }
+            }
+
+            // Phase 2: 用正确的 target_character_id 导入数据库和配置
+            const result = await importData(importFilePath, {
                 import_database: importDb,
                 import_configs: importConfigs,
                 conflict_strategy: conflictStrategy,
-            };
-            const result = await importData(importFilePath, options);
+                target_character_id: targetCharacterId,
+            });
+
             setImportDone(t('settings.backup.import_stats', {
                 memories: result.imported_memories,
                 conversations: result.imported_conversations,
                 configs: result.imported_configs,
             }));
             setPreview(null);
+            setTimeout(() => relaunch(), 1500);
         } catch (e: any) {
             setImportError(String(e));
         } finally {
@@ -196,7 +280,7 @@ export const BackupTab: React.FC = () => {
                                 <label className="flex items-center gap-2 text-xs text-[var(--color-text-primary)] cursor-pointer">
                                     <input type="checkbox" checked={importDb} onChange={e => setImportDb(e.target.checked)}
                                         className={clsx(toggleClasses, importDb ? "bg-[var(--color-accent)]" : "bg-[var(--color-border)]")}
-                                        style={{ appearance: 'auto' }}
+                                        style={{ appearance: 'none' }}
                                     />
                                     {t('settings.backup.option_database')}
                                 </label>
@@ -204,7 +288,8 @@ export const BackupTab: React.FC = () => {
                             {preview.has_configs && (
                                 <label className="flex items-center gap-2 text-xs text-[var(--color-text-primary)] cursor-pointer">
                                     <input type="checkbox" checked={importConfigs} onChange={e => setImportConfigs(e.target.checked)}
-                                        style={{ appearance: 'auto' }}
+                                        className={clsx(toggleClasses, importConfigs ? "bg-[var(--color-accent)]" : "bg-[var(--color-border)]")}
+                                        style={{ appearance: 'none' }}
                                     />
                                     {t('settings.backup.option_configs')}
                                 </label>

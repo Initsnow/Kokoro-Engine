@@ -5,8 +5,10 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use crate::ai::context::AIOrchestrator;
 use tauri::AppHandle;
 use tauri::Manager;
+use tauri::State;
 use zip::write::SimpleFileOptions;
 
 /// All JSON config filenames we back up.
@@ -21,6 +23,8 @@ const CONFIG_FILES: &[&str] = &[
     "jailbreak_prompt.json",
     "proactive_enabled.json",
     "emotion_state.json",
+    "context_settings.json",
+    "current_conversation_id.json",
 ];
 
 // ── Types ────────────────────────────────────────────
@@ -61,6 +65,7 @@ pub struct ImportOptions {
     pub import_database: bool,
     pub import_configs: bool,
     pub conflict_strategy: String, // "skip" | "overwrite"
+    pub target_character_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -68,6 +73,7 @@ pub struct ImportResult {
     pub imported_memories: i64,
     pub imported_conversations: i64,
     pub imported_configs: usize,
+    pub characters_json: Option<String>,
 }
 
 // ── Helpers ──────────────────────────────────────────
@@ -140,7 +146,7 @@ async fn gather_stats(path: &Path) -> BackupStats {
 // ── Commands ─────────────────────────────────────────
 
 #[tauri::command]
-pub async fn export_data(app: AppHandle, export_path: String) -> Result<ExportResult, String> {
+pub async fn export_data(app: AppHandle, export_path: String, characters_json: Option<String>) -> Result<ExportResult, String> {
     let app_data = app_data_dir(&app)?;
     let db = db_path(&app_data);
 
@@ -214,7 +220,15 @@ pub async fn export_data(app: AppHandle, export_path: String) -> Result<ExportRe
             .map_err(|e| format!("ZIP write error: {}", e))?;
     }
 
-    // 4. configs/
+    // 4. characters.json (from IndexedDB, serialized by frontend)
+    if let Some(ref chars) = characters_json {
+        zip.start_file("characters.json", options)
+            .map_err(|e| format!("ZIP error: {}", e))?;
+        zip.write_all(chars.as_bytes())
+            .map_err(|e| format!("ZIP write error: {}", e))?;
+    }
+
+    // 5. configs/
     for name in CONFIG_FILES {
         let cfg_path = app_data.join(name);
         if cfg_path.exists() {
@@ -320,11 +334,11 @@ pub async fn preview_import(file_path: String) -> Result<ImportPreview, String> 
 #[tauri::command]
 pub async fn import_data(
     app: AppHandle,
+    orchestrator: State<'_, AIOrchestrator>,
     file_path: String,
     options: ImportOptions,
 ) -> Result<ImportResult, String> {
     let app_data = app_data_dir(&app)?;
-    let target_db = db_path(&app_data);
 
     // Phase 1: Extract everything from ZIP synchronously (ZipFile is !Send)
     let tmp_dir = std::env::temp_dir().join("kokoro_import");
@@ -332,6 +346,7 @@ pub async fn import_data(
 
     let mut has_db = false;
     let mut extracted_configs: Vec<(String, String)> = Vec::new();
+    let mut characters_json: Option<String> = None;
 
     {
         let path = PathBuf::from(&file_path);
@@ -339,21 +354,24 @@ pub async fn import_data(
         let mut archive =
             zip::ZipArchive::new(file).map_err(|e| format!("Invalid ZIP archive: {}", e))?;
 
-        // Extract DB if requested
+        // Extract DB if requested — always to a temp file to avoid clobbering the live DB
         if options.import_database && archive.by_name("kokoro.db").is_ok() {
             has_db = true;
-            let extract_target = if options.conflict_strategy == "overwrite" {
-                target_db.clone()
-            } else {
-                tmp_dir.join("import.db")
-            };
             let mut entry = archive
                 .by_name("kokoro.db")
                 .map_err(|e| format!("Failed to read DB: {}", e))?;
-            let mut out = fs::File::create(&extract_target)
+            let mut out = fs::File::create(&tmp_dir.join("import.db"))
                 .map_err(|e| format!("Failed to write DB: {}", e))?;
             std::io::copy(&mut entry, &mut out)
                 .map_err(|e| format!("Failed to extract DB: {}", e))?;
+        }
+
+        // Extract characters.json if present
+        if let Ok(mut entry) = archive.by_name("characters.json") {
+            let mut content = String::new();
+            if entry.read_to_string(&mut content).is_ok() {
+                characters_json = Some(content);
+            }
         }
 
         // Extract configs into memory
@@ -391,73 +409,111 @@ pub async fn import_data(
         imported_memories: 0,
         imported_conversations: 0,
         imported_configs: 0,
+        characters_json,
     };
 
     if has_db {
-        if options.conflict_strategy == "overwrite" {
-            let stats = gather_stats(&target_db).await;
-            result.imported_memories = stats.memories;
-            result.imported_conversations = stats.conversations;
-        } else {
-            let tmp_db = tmp_dir.join("import.db");
+        let tmp_db = tmp_dir.join("import.db");
+        // 必须用同一个连接：ATTACH DATABASE 是连接级别的操作
+        let mut conn = orchestrator.db.acquire().await
+            .map_err(|e| format!("Failed to acquire DB connection: {}", e))?;
 
-            let url = format!(
-                "sqlite://{}",
-                target_db.to_string_lossy().replace('\\', "/")
-            );
-            let pool_opts = SqliteConnectOptions::from_str(&url)
-                .map_err(|e| format!("Invalid DB path: {}", e))?;
-            let pool = SqlitePool::connect_with(pool_opts)
-                .await
-                .map_err(|e| format!("Failed to open target DB: {}", e))?;
-
-            let attach_path = tmp_db.to_string_lossy().replace('\\', "/").replace('\'', "''");
-            sqlx::query(&format!(
-                "ATTACH DATABASE '{}' AS import_db",
-                attach_path
-            ))
-            .execute(&pool)
+        let attach_path = tmp_db.to_string_lossy().replace('\\', "/").replace('\'', "''");
+        println!("[Backup] Attaching import DB from: {}", attach_path);
+        sqlx::query(&format!("ATTACH DATABASE '{}' AS import_db", attach_path))
+            .execute(&mut *conn)
             .await
             .map_err(|e| format!("ATTACH failed: {}", e))?;
 
-            if let Ok(r) = sqlx::query(
-                "INSERT OR IGNORE INTO memories SELECT * FROM import_db.memories",
-            )
-            .execute(&pool)
+        // 验证 ATTACH 成功，能读到数据
+        let import_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM import_db.memories")
+            .fetch_one(&mut *conn)
             .await
-            {
-                result.imported_memories = r.rows_affected() as i64;
-            }
+            .map_err(|e| format!("Failed to count import_db.memories: {}", e))?;
+        println!("[Backup] import_db.memories count: {}", import_count);
 
-            if let Ok(r) = sqlx::query(
-                "INSERT OR IGNORE INTO conversations SELECT * FROM import_db.conversations",
-            )
-            .execute(&pool)
-            .await
-            {
-                result.imported_conversations = r.rows_affected() as i64;
-            }
+        // 打印备份里实际的 character_id 分布
+        let char_ids: Vec<String> = sqlx::query_scalar(
+            "SELECT DISTINCT character_id FROM import_db.memories"
+        )
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap_or_default();
+        println!("[Backup] import_db.memories character_ids: {:?}", char_ids);
 
-            let _ = sqlx::query(
-                "INSERT OR IGNORE INTO conversation_messages SELECT * FROM import_db.conversation_messages",
-            )
-            .execute(&pool)
-            .await;
+        if options.conflict_strategy == "overwrite" {
+            // 先删除 FTS 触发器，避免批量操作时触发器访问损坏的 FTS 索引
+            sqlx::query("DROP TRIGGER IF EXISTS memories_ai").execute(&mut *conn).await.ok();
+            sqlx::query("DROP TRIGGER IF EXISTS memories_ad").execute(&mut *conn).await.ok();
+            sqlx::query("DROP TRIGGER IF EXISTS memories_au").execute(&mut *conn).await.ok();
 
-            let _ = sqlx::query(
-                "INSERT OR IGNORE INTO characters SELECT * FROM import_db.characters",
-            )
-            .execute(&pool)
-            .await;
+            sqlx::query("DELETE FROM conversation_messages").execute(&mut *conn).await
+                .map_err(|e| format!("DELETE conversation_messages failed: {}", e))?;
+            sqlx::query("DELETE FROM conversations").execute(&mut *conn).await
+                .map_err(|e| format!("DELETE conversations failed: {}", e))?;
+            sqlx::query("DELETE FROM memories").execute(&mut *conn).await
+                .map_err(|e| format!("DELETE memories failed: {}", e))?;
 
-            let _ = sqlx::query("DETACH DATABASE import_db")
-                .execute(&pool)
-                .await;
+            let r = sqlx::query("INSERT INTO memories SELECT * FROM import_db.memories")
+                .execute(&mut *conn).await
+                .map_err(|e| format!("INSERT memories failed: {}", e))?;
+            result.imported_memories = r.rows_affected() as i64;
+            println!("[Backup] Inserted {} memories", result.imported_memories);
 
-            pool.close().await;
+            let r = sqlx::query("INSERT INTO conversations SELECT * FROM import_db.conversations")
+                .execute(&mut *conn).await
+                .map_err(|e| format!("INSERT conversations failed: {}", e))?;
+            result.imported_conversations = r.rows_affected() as i64;
 
-            let _ = fs::remove_file(&tmp_db);
+            sqlx::query("INSERT INTO conversation_messages SELECT * FROM import_db.conversation_messages")
+                .execute(&mut *conn).await
+                .map_err(|e| format!("INSERT conversation_messages failed: {}", e))?;
+
+            // 重建 FTS 索引并恢复触发器
+            sqlx::query("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')").execute(&mut *conn).await.ok();
+            sqlx::query("CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN INSERT INTO memories_fts(rowid, content) VALUES (new.id, new.content); END").execute(&mut *conn).await.ok();
+            sqlx::query("CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN INSERT INTO memories_fts(memories_fts, rowid, content) VALUES('delete', old.id, old.content); END").execute(&mut *conn).await.ok();
+            sqlx::query("CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN INSERT INTO memories_fts(memories_fts, rowid, content) VALUES('delete', old.id, old.content); INSERT INTO memories_fts(rowid, content) VALUES (new.id, new.content); END").execute(&mut *conn).await.ok();
+        } else {
+            // skip 模式：先重建 FTS 以防损坏
+            sqlx::query("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')").execute(&mut *conn).await.ok();
+
+            let r = sqlx::query("INSERT OR IGNORE INTO memories SELECT * FROM import_db.memories")
+                .execute(&mut *conn).await
+                .map_err(|e| format!("INSERT OR IGNORE memories failed: {}", e))?;
+            result.imported_memories = r.rows_affected() as i64;
+            println!("[Backup] Inserted {} memories (skip mode)", result.imported_memories);
+
+            let r = sqlx::query("INSERT OR IGNORE INTO conversations SELECT * FROM import_db.conversations")
+                .execute(&mut *conn).await
+                .map_err(|e| format!("INSERT OR IGNORE conversations failed: {}", e))?;
+            result.imported_conversations = r.rows_affected() as i64;
+
+            sqlx::query("INSERT OR IGNORE INTO conversation_messages SELECT * FROM import_db.conversation_messages")
+                .execute(&mut *conn).await
+                .map_err(|e| format!("INSERT OR IGNORE conversation_messages failed: {}", e))?;
+
+            sqlx::query("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')").execute(&mut *conn).await.ok();
         }
+
+        sqlx::query("DETACH DATABASE import_db").execute(&mut *conn).await
+            .map_err(|e| format!("DETACH failed: {}", e))?;
+
+        // 如果指定了目标 character_id，把所有导入的记忆和对话重映射过去
+        if let Some(ref target_id) = options.target_character_id {
+            println!("[Backup] Remapping character_id to '{}'", target_id);
+            sqlx::query("UPDATE memories SET character_id = ? WHERE character_id != ?")
+                .bind(target_id)
+                .bind(target_id)
+                .execute(&mut *conn).await.ok();
+            sqlx::query("UPDATE conversations SET character_id = ? WHERE character_id != ?")
+                .bind(target_id)
+                .bind(target_id)
+                .execute(&mut *conn).await.ok();
+        }
+
+        drop(conn);
+        let _ = fs::remove_file(&tmp_db);
     }
 
     // Phase 3: Write config files

@@ -36,6 +36,7 @@ fastembed = "5.9.0"
 rquickjs = { version = "0.6", features = ["futures", "macro", "chrono", "loader"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-process = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 dirs-next = "2"
 uuid = { version = "1.20.0", features = ["v4"] }
