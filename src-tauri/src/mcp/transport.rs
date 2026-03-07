@@ -93,6 +93,8 @@ impl StdioTransport {
             let mut cmd_args = vec!["/C".to_string(), command.to_string()];
             cmd_args.extend(args.iter().cloned());
             c.args(&cmd_args);
+            // CREATE_NO_WINDOW: prevent cmd.exe console window from appearing
+            c.creation_flags(0x08000000);
             c
         };
         #[cfg(not(target_os = "windows"))]
