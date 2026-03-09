@@ -655,6 +655,7 @@ impl SseTransport {
     }
 
     /// Build the full POST URL from the base URL and the endpoint path.
+    /// 验证绝对 URL 的 origin 与初始连接一致，防止 SSRF。
     async fn get_post_url(&self) -> Result<String, String> {
         let endpoint = self
             .post_endpoint
@@ -665,6 +666,17 @@ impl SseTransport {
 
         // The endpoint may be an absolute path or a relative path
         if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
+            // 验证 origin 与初始连接一致，防止恶意服务器重定向到内网地址（SSRF）
+            let ep_origin = reqwest::Url::parse(&endpoint)
+                .ok()
+                .map(|u| u.origin().ascii_serialization());
+            if ep_origin.as_deref() != Some(&self.origin) {
+                return Err(format!(
+                    "SSE endpoint origin '{}' does not match expected origin '{}'",
+                    ep_origin.unwrap_or_default(),
+                    self.origin
+                ));
+            }
             Ok(endpoint)
         } else {
             Ok(format!("{}{}", self.origin, endpoint))

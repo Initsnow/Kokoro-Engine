@@ -43,16 +43,30 @@ pub fn handle_mod_request<R: tauri::Runtime>(
     let file_path = mods_base.join(clean_path);
 
     // Security: 验证规范路径在 mods 目录内，防止符号链接绕过
-    if let (Ok(canonical_base), Ok(canonical_file)) = (
-        mods_base.canonicalize(),
-        file_path.canonicalize(),
-    ) {
-        if !canonical_file.starts_with(&canonical_base) {
+    // canonicalize 失败（文件不存在或符号链接断裂）时明确拒绝，而不是静默跳过
+    let canonical_base = match mods_base.canonicalize() {
+        Ok(p) => p,
+        Err(_) => {
             return tauri::http::Response::builder()
                 .status(403)
                 .body(b"Forbidden".to_vec())
                 .unwrap();
         }
+    };
+    let canonical_file = match file_path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => {
+            return tauri::http::Response::builder()
+                .status(404)
+                .body(b"Not Found".to_vec())
+                .unwrap();
+        }
+    };
+    if !canonical_file.starts_with(&canonical_base) {
+        return tauri::http::Response::builder()
+            .status(403)
+            .body(b"Forbidden".to_vec())
+            .unwrap();
     }
 
     if !file_path.exists() {
@@ -92,20 +106,20 @@ pub fn handle_mod_request<R: tauri::Runtime>(
 
             tauri::http::Response::builder()
                 .header("Content-Type", mime_type)
-                .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-                .header("Access-Control-Allow-Headers", "*")
-                // CSP for mod HTML — allows inline styles/scripts and local resources,
-                // but restricts network access to prevent data exfiltration.
-                // unsafe-eval is intentionally excluded; mods should not need it.
+                // 限制 CORS 仅允许应用自身 origin，不对外开放
+                .header("Access-Control-Allow-Origin", "tauri://localhost")
+                .header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                .header("Access-Control-Allow-Headers", "Content-Type")
+                // CSP: 移除宽泛的 localhost 通配，防止 MOD 探测本地服务
+                // connect-src 仅允许 mod:// 协议自身资源，不允许任意 localhost 端口
                 .header(
                     "Content-Security-Policy",
                     "default-src 'self' mod: data: blob: 'unsafe-inline'; \
-                     img-src * data: blob:; \
+                     img-src mod: data: blob:; \
                      media-src 'self' mod: data: blob:; \
                      script-src 'self' mod: 'unsafe-inline'; \
                      style-src 'self' mod: 'unsafe-inline'; \
-                     connect-src 'self' mod: http://localhost https://localhost ws://localhost wss://localhost;",
+                     connect-src 'self' mod:;",
                 )
                 .body(body)
                 .unwrap()

@@ -93,6 +93,15 @@ fn db_path(_app_data: &Path) -> PathBuf {
 }
 
 /// Validate that a filename from a ZIP entry is safe (no path traversal).
+/// RAII 临时目录守卫：离开作用域时自动删除目录，确保错误路径也能清理
+struct TempDirGuard(std::path::PathBuf);
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 fn is_safe_filename(name: &str) -> bool {
     !name.contains("..") && !name.starts_with('/') && !name.starts_with('\\') && !name.contains(':')
 }
@@ -108,11 +117,26 @@ async fn open_readonly_pool(path: &Path) -> Result<SqlitePool, String> {
         .map_err(|e| format!("Failed to open DB: {}", e))
 }
 
+/// 受限的表名枚举，防止 count_rows 被传入任意字符串
+enum CountTable {
+    Memories,
+    Conversations,
+    ConversationMessages,
+}
+
+impl CountTable {
+    fn as_sql(&self) -> &'static str {
+        match self {
+            CountTable::Memories => "SELECT COUNT(*) as cnt FROM memories",
+            CountTable::Conversations => "SELECT COUNT(*) as cnt FROM conversations",
+            CountTable::ConversationMessages => "SELECT COUNT(*) as cnt FROM conversation_messages",
+        }
+    }
+}
+
 /// Count rows in a table via sqlx. Returns 0 on any error.
-async fn count_rows(pool: &SqlitePool, table: &str) -> i64 {
-    // table names are hardcoded constants, safe to interpolate
-    let query = format!("SELECT COUNT(*) as cnt FROM {}", table);
-    sqlx::query(&query)
+async fn count_rows(pool: &SqlitePool, table: CountTable) -> i64 {
+    sqlx::query(table.as_sql())
         .fetch_one(pool)
         .await
         .and_then(|row| row.try_get::<i64, _>("cnt"))
@@ -131,9 +155,9 @@ async fn gather_stats(path: &Path) -> BackupStats {
             }
         }
     };
-    let memories = count_rows(&pool, "memories").await;
-    let conversations = count_rows(&pool, "conversations").await;
-    let messages = count_rows(&pool, "conversation_messages").await;
+    let memories = count_rows(&pool, CountTable::Memories).await;
+    let conversations = count_rows(&pool, CountTable::Conversations).await;
+    let messages = count_rows(&pool, CountTable::ConversationMessages).await;
     pool.close().await;
     BackupStats {
         memories,
@@ -295,9 +319,12 @@ pub async fn preview_import(file_path: String) -> Result<ImportPreview, String> 
 
     // If DB present, extract to temp and count rows
     let stats = if has_database {
-        let tmp_dir = std::env::temp_dir().join("kokoro_import_preview");
-        let _ = fs::create_dir_all(&tmp_dir);
-        let tmp_db = tmp_dir.join("preview.db");
+        let tmp_dir_path = std::env::temp_dir().join("kokoro_import_preview");
+        fs::create_dir_all(&tmp_dir_path)
+            .map_err(|e| format!("Failed to create temp dir: {}", e))?;
+        // RAII 守卫：无论成功还是失败都会自动清理临时目录
+        let _tmp_guard = TempDirGuard(tmp_dir_path.clone());
+        let tmp_db = tmp_dir_path.join("preview.db");
 
         {
             let mut entry = archive
@@ -309,10 +336,7 @@ pub async fn preview_import(file_path: String) -> Result<ImportPreview, String> 
                 .map_err(|e| format!("Failed to extract DB: {}", e))?;
         }
 
-        let s = gather_stats(&tmp_db).await;
-        let _ = fs::remove_file(&tmp_db);
-        let _ = fs::remove_dir(&tmp_dir);
-        s
+        gather_stats(&tmp_db).await
     } else {
         BackupStats {
             memories: 0,
@@ -342,7 +366,10 @@ pub async fn import_data(
 
     // Phase 1: Extract everything from ZIP synchronously (ZipFile is !Send)
     let tmp_dir = std::env::temp_dir().join("kokoro_import");
-    let _ = fs::create_dir_all(&tmp_dir);
+    fs::create_dir_all(&tmp_dir)
+        .map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    // RAII 守卫：无论成功还是失败都会自动清理临时目录
+    let _tmp_guard = TempDirGuard(tmp_dir.clone());
 
     let mut has_db = false;
     let mut extracted_configs: Vec<(String, String)> = Vec::new();
@@ -418,9 +445,11 @@ pub async fn import_data(
         let mut conn = orchestrator.db.acquire().await
             .map_err(|e| format!("Failed to acquire DB connection: {}", e))?;
 
-        let attach_path = tmp_db.to_string_lossy().replace('\\', "/").replace('\'', "''");
+        let attach_path = tmp_db.to_string_lossy().replace('\\', "/");
         println!("[Backup] Attaching import DB from: {}", attach_path);
-        sqlx::query(&format!("ATTACH DATABASE '{}' AS import_db", attach_path))
+        // 使用参数绑定防止 SQL 注入
+        sqlx::query("ATTACH DATABASE ? AS import_db")
+            .bind(&attach_path)
             .execute(&mut *conn)
             .await
             .map_err(|e| format!("ATTACH failed: {}", e))?;
@@ -513,7 +542,7 @@ pub async fn import_data(
         }
 
         drop(conn);
-        let _ = fs::remove_file(&tmp_db);
+        // tmp_db 由 _tmp_guard 在函数结束时自动清理，无需手动删除
     }
 
     // Phase 3: Write config files
@@ -524,7 +553,7 @@ pub async fn import_data(
         result.imported_configs += 1;
     }
 
-    let _ = fs::remove_dir(&tmp_dir);
+    // tmp_dir 由 _tmp_guard 自动清理
 
     println!(
         "[Backup] Imported: {} memories, {} conversations, {} configs",

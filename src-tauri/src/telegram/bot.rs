@@ -9,11 +9,25 @@ use crate::tts::TtsService;
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 use teloxide::prelude::*;
 use teloxide::types::InputFile;
 use tokio::sync::{oneshot, RwLock};
+
+/// 每用户速率限制：滑动窗口内最多允许的消息数
+const RATE_LIMIT_MAX: usize = 10;
+const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
+
+/// 每个 chat 的速率限制状态
+#[derive(Clone, Debug)]
+struct RateState {
+    count: usize,
+    window_start: Instant,
+}
+
+type RateLimiter = Arc<RwLock<HashMap<ChatId, RateState>>>;
 
 /// Per-chat session state.
 #[derive(Clone, Debug)]
@@ -45,12 +59,13 @@ pub async fn run_polling(
     let bot = Bot::new(&token);
     let config = Arc::new(config);
     let sessions: Sessions = Arc::new(RwLock::new(HashMap::new()));
+    let rate_limiter: RateLimiter = Arc::new(RwLock::new(HashMap::new()));
 
     // Build the update handler
     let handler = Update::filter_message().endpoint(handle_message);
 
     let mut dispatcher = Dispatcher::builder(bot.clone(), handler)
-        .dependencies(dptree::deps![config.clone(), sessions.clone(), app.clone()])
+        .dependencies(dptree::deps![config.clone(), sessions.clone(), app.clone(), rate_limiter.clone()])
         .default_handler(|_upd| async {})
         .build();
 
@@ -74,9 +89,11 @@ async fn handle_message(
     config: Arc<TelegramConfig>,
     sessions: Sessions,
     app: tauri::AppHandle,
+    rate_limiter: RateLimiter,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let chat_id = msg.chat.id;
-    println!("[Telegram] Received message from chat_id={}, text={:?}", chat_id.0, msg.text());
+    // 不记录消息内容，避免敏感信息泄露到日志
+    println!("[Telegram] Received message from chat_id={}", chat_id.0);
 
     // Access control: check whitelist
     if !config.allowed_chat_ids.is_empty()
@@ -84,6 +101,27 @@ async fn handle_message(
     {
         println!("[Telegram] Chat {} not in whitelist, ignoring", chat_id.0);
         return Ok(());
+    }
+
+    // 速率限制：滑动窗口，每分钟最多 RATE_LIMIT_MAX 条消息
+    {
+        let mut limiter = rate_limiter.write().await;
+        let state = limiter.entry(chat_id).or_insert(RateState {
+            count: 0,
+            window_start: Instant::now(),
+        });
+        if state.window_start.elapsed() >= RATE_LIMIT_WINDOW {
+            state.count = 0;
+            state.window_start = Instant::now();
+        }
+        state.count += 1;
+        if state.count > RATE_LIMIT_MAX {
+            println!("[Telegram] Rate limit exceeded for chat_id={}", chat_id.0);
+            bot.send_message(chat_id, "⚠️ Too many messages. Please wait a moment.")
+                .await
+                .ok();
+            return Ok(());
+        }
     }
 
     // Check for commands
