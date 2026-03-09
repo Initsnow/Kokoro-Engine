@@ -567,8 +567,8 @@ pub async fn stream_chat(
             all_cleaned_text.push_str(&cleaned_text);
         }
 
-        // Persist assistant draft incrementally (skip for hidden interactions)
-        if !request.hidden && !all_cleaned_text.is_empty() {
+        // Persist assistant draft incrementally (hidden interactions still save the response, just not the user message)
+        if !all_cleaned_text.is_empty() {
             let draft_content = strip_leaked_tags(&all_cleaned_text);
             if !draft_content.is_empty() {
                 match draft_row_id {
@@ -741,8 +741,9 @@ pub async fn stream_chat(
         let _ = window.emit("chat-translation", &combined_translation);
     }
 
-    // 8. Update History with final response (skip for hidden/touch interactions)
-    if !full_response.is_empty() && !request.hidden {
+    // 8. Update History with final response
+    // hidden 模式下跳过用户消息保存，但助手回复仍需持久化以便重载后显示
+    if !full_response.is_empty() {
         let metadata = if !all_translations.is_empty() {
             let combined = all_translations.join(" ");
             Some(serde_json::json!({ "translation": combined }).to_string())
