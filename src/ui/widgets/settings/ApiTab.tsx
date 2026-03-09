@@ -356,21 +356,41 @@ export default function ApiTab({ visionEnabled, onVisionEnabledChange }: ApiTabP
                 <label className={labelClasses}>{t("settings.api.provider_label")}</label>
                 <div className="flex gap-2">
                     {config.providers.map((p) => (
-                        <button
-                            key={p.id}
-                            onClick={() => setConfig({ ...config, active_provider: p.id })}
-                            className={clsx(
-                                "flex-1 px-3 py-2 text-xs rounded-lg border transition-all",
-                                config.active_provider === p.id
-                                    ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                                    : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)]"
+                        <div key={p.id} className="relative flex-1 group/card">
+                            <button
+                                onClick={() => setConfig({ ...config, active_provider: p.id })}
+                                className={clsx(
+                                    "w-full px-3 py-2 text-xs rounded-lg border transition-all",
+                                    config.active_provider === p.id
+                                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                                        : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)]"
+                                )}
+                            >
+                                <div className="font-medium capitalize">{p.id}</div>
+                                <div className="text-[9px] opacity-70 mt-0.5">
+                                    {p.provider_type === "ollama" ? "Local" : "Cloud"}
+                                </div>
+                            </button>
+                            {config.providers.length > 1 && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const remaining = config.providers.filter((x) => x.id !== p.id);
+                                        const newActive = config.active_provider === p.id
+                                            ? remaining[0]?.id ?? ""
+                                            : config.active_provider;
+                                        setConfig({ ...config, providers: remaining, active_provider: newActive });
+                                    }}
+                                    className="absolute top-1 right-2 text-[var(--color-text-muted)] hover:text-red-400 opacity-0 group-hover/card:opacity-100 transition-opacity"
+                                    title={t("common.actions.delete")}
+                                >
+                                    <svg width="6" height="6" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                        <line x1="1" y1="1" x2="7" y2="7"/>
+                                        <line x1="7" y1="1" x2="1" y2="7"/>
+                                    </svg>
+                                </button>
                             )}
-                        >
-                            <div className="font-medium capitalize">{p.id}</div>
-                            <div className="text-[9px] opacity-70 mt-0.5">
-                                {p.provider_type === "ollama" ? "Local" : "Cloud"}
-                            </div>
-                        </button>
+                        </div>
                     ))}
                 </div>
             </div>
