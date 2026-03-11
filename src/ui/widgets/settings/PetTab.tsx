@@ -239,7 +239,7 @@ export default function PetTab() {
                 style={{
                     padding: "10px", borderRadius: "8px", border: "none",
                     background: saved ? "var(--color-success, #4caf50)" : "var(--color-accent)",
-                    color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+                    color: "#000", fontSize: "13px", fontWeight: 600, cursor: "pointer",
                     transition: "background 0.2s",
                 }}
             >
