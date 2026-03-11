@@ -2,6 +2,7 @@
 
 use super::config::TelegramConfig;
 use crate::ai::context::AIOrchestrator;
+use crate::ai::memory_extractor;
 use crate::imagegen::ImageGenService;
 use crate::llm::service::LlmService;
 use crate::stt::{AudioSource, SttService};
@@ -332,6 +333,23 @@ async fn handle_text(
         .add_message_with_metadata("assistant".to_string(), cleaned.clone(), metadata)
         .await;
 
+    // Trigger periodic memory extraction (every 5 user messages)
+    let msg_count = orchestrator.get_message_count().await;
+    if msg_count > 0 && msg_count % 5 == 0 {
+        let history = orchestrator.get_recent_history(10).await;
+        let memory_mgr = orchestrator.memory_manager.clone();
+        let provider_for_mem = llm_service.provider().await;
+        tauri::async_runtime::spawn(async move {
+            memory_extractor::extract_and_store_memories(
+                &history,
+                &memory_mgr,
+                provider_for_mem,
+                "default".to_string(),
+            )
+            .await;
+        });
+    }
+
     // Sync assistant message to desktop UI
     let _ = app.emit("telegram:chat-sync", TelegramChatSync {
         role: "assistant".to_string(),
@@ -550,6 +568,23 @@ async fn handle_photo(
     orchestrator
         .add_message_with_metadata("assistant".to_string(), cleaned.clone(), metadata)
         .await;
+
+    // Trigger periodic memory extraction (every 5 user messages)
+    let msg_count = orchestrator.get_message_count().await;
+    if msg_count > 0 && msg_count % 5 == 0 {
+        let history = orchestrator.get_recent_history(10).await;
+        let memory_mgr = orchestrator.memory_manager.clone();
+        let provider_for_mem = llm_service.provider().await;
+        tauri::async_runtime::spawn(async move {
+            memory_extractor::extract_and_store_memories(
+                &history,
+                &memory_mgr,
+                provider_for_mem,
+                "default".to_string(),
+            )
+            .await;
+        });
+    }
 
     // Sync to desktop
     let _ = app.emit("telegram:chat-sync", TelegramChatSync {
