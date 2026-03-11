@@ -175,6 +175,7 @@ export default function ChatPanel() {
                                 .replace(/\[TOOL_CALL:[^\]]*\]\s*/g, "")
                                 .replace(/\[EMOTION:[^\]]*\]/g, "")
                                 .replace(/\[IMAGE_PROMPT:[^\]]*\]/g, "")
+                                .replace(/\[\w+\|[^\]]*=[^\]]*\]\s*/g, "")
                                 .trim();
                             return { role: "kokoro" as const, text, translation };
                         }
@@ -368,7 +369,8 @@ export default function ChatPanel() {
                 const delta = rawDelta
                     .replace(/\[ACTION:\w+\]\s*/g, "")
                     .replace(/\[TOOL_CALL:[^\]]*\]\s*/g, "")
-                    .replace(/\[TRANSLATE:[^\]]*\]\s*/g, "");
+                    .replace(/\[TRANSLATE:[^\]]*\]\s*/g, "")
+                    .replace(/\[\w+\|[^\]]*=[^\]]*\]\s*/g, "");
                 if (!delta) return;
                 setIsThinking(false);
 
@@ -424,7 +426,8 @@ export default function ChatPanel() {
                                 .replace(/\[TOOL_CALL:[^\]]*\]\s*/g, "")
                                 .replace(/\[EMOTION:[^\]]*\]/g, "")
                                 .replace(/\[IMAGE_PROMPT:[^\]]*\]/g, "")
-                                .replace(/\[TRANSLATE:[\s\S]*?\]/gi, "");
+                                .replace(/\[TRANSLATE:[\s\S]*?\]/gi, "")
+                                .replace(/\[\w+\|[^\]]*=[^\]]*\]\s*/g, "");
                             return [...prev.slice(0, -1), { ...last, text: cleanText, translation: translationText }];
                         }
                         return prev;
@@ -454,6 +457,7 @@ export default function ChatPanel() {
                             .replace(/\[ACTION:\w+\]/g, "")
                             .replace(/\[TOOL_CALL:[^\]]*\]/g, "")
                             .replace(/\[TRANSLATE:[\s\S]*?\]/gi, "")
+                            .replace(/\[\w+\|[^\]]*=[^\]]*\]\s*/g, "")
                             .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, "")
                             .trim();
 
