@@ -348,6 +348,7 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                     };
 
                     model.on("pointerdown", (e: PIXI.InteractionEvent) => {
+                        if (e.data.button !== 0) return; // 只处理左键
                         pointerDownTime = Date.now();
                         longPressFired = false;
                         const { x, y } = e.data.global;
@@ -360,6 +361,7 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                     });
 
                     model.on("pointerup", (e: PIXI.InteractionEvent) => {
+                        if (e.data.button !== 0) return; // 只处理左键
                         if (longPressTimer) {
                             clearTimeout(longPressTimer);
                             longPressTimer = null;
