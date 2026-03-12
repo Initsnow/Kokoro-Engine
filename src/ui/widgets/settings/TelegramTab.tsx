@@ -58,6 +58,7 @@ export default function TelegramTab() {
     const handleSave = async () => {
         if (!config) return;
         try {
+            console.log("[TelegramTab] Saving config:", JSON.stringify(config));
             await saveTelegramConfig(config);
             setDirty(false);
         } catch (e) {
