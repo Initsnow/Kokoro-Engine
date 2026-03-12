@@ -256,7 +256,7 @@ impl ActionHandler for StoreMemoryAction {
 
         println!(
             "[Memory] Tool stored: '{}' (importance={:.1}) for '{}'",
-            &fact[..fact.len().min(60)],
+            fact.chars().take(60).collect::<String>(),
             importance,
             char_id
         );
