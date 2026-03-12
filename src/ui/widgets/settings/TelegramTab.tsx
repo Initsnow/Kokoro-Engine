@@ -6,9 +6,10 @@ import { useTranslation } from "react-i18next";
 import {
     getTelegramConfig, saveTelegramConfig,
     startTelegramBot, stopTelegramBot, getTelegramStatus,
-    listCharacterIds,
 } from "../../../lib/kokoro-bridge";
 import type { TelegramConfig, TelegramStatus } from "../../../lib/kokoro-bridge";
+import { characterDb } from "../../../lib/db";
+import type { CharacterProfile } from "../../../lib/db";
 import { inputClasses, labelClasses } from "../../styles/settings-primitives";
 
 export default function TelegramTab() {
@@ -18,7 +19,7 @@ export default function TelegramTab() {
     const [loading, setLoading] = useState(true);
     const [dirty, setDirty] = useState(false);
     const [chatIdInput, setChatIdInput] = useState("");
-    const [characterIds, setCharacterIds] = useState<string[]>([]);
+    const [characters, setCharacters] = useState<CharacterProfile[]>([]);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
@@ -33,14 +34,14 @@ export default function TelegramTab() {
 
     const loadAll = async () => {
         try {
-            const [cfg, st, ids] = await Promise.all([
+            const [cfg, st, chars] = await Promise.all([
                 getTelegramConfig(),
                 getTelegramStatus(),
-                listCharacterIds(),
+                characterDb.getAll(),
             ]);
             setConfig(cfg);
             setStatus(st);
-            setCharacterIds(ids);
+            setCharacters(chars);
         } catch (e) {
             console.error("[TelegramTab] Failed to load:", e);
         } finally {
@@ -258,8 +259,10 @@ export default function TelegramTab() {
                     className={inputClasses}
                 >
                     <option value="">{t("telegram.character_id.auto")}</option>
-                    {characterIds.map(id => (
-                        <option key={id} value={id}>{id}</option>
+                    {characters.map(char => (
+                        <option key={char.id} value={String(char.id)}>
+                            {char.name}
+                        </option>
                     ))}
                 </select>
                 <div className="text-xs text-[var(--color-text-muted)] mt-1">
