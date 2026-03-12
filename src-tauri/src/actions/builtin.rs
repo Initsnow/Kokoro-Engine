@@ -261,6 +261,9 @@ impl ActionHandler for StoreMemoryAction {
             char_id
         );
 
+        // Notify frontend to refresh memory panel
+        let _ = ctx.app.emit("memory:updated", &char_id);
+
         Ok(ActionResult::ok(format!(
             "Remembered: \"{}\" (importance: {:.1})",
             fact, importance

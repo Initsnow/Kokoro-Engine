@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import { useTranslation } from "react-i18next";
@@ -6,6 +6,7 @@ import { Trash2, Pencil, Check, X, Search, Brain, ChevronDown, List, Calendar, S
 import { inputClasses } from "../styles/settings-primitives";
 import { listMemories, updateMemory, deleteMemory } from "../../lib/kokoro-bridge";
 import type { MemoryRecord } from "../../lib/kokoro-bridge";
+import { listen } from "@tauri-apps/api/event";
 import { MemoryTimeline } from "./memory/MemoryTimeline";
 import { MemoryGraph } from "./memory/MemoryGraph";
 import { characterDb, type CharacterProfile } from "../../lib/db";
@@ -72,6 +73,19 @@ export default function MemoryPanel({ characterId }: MemoryPanelProps) {
     useEffect(() => {
         fetchMemories();
     }, [fetchMemories]);
+
+    // Auto-refresh when backend writes a new memory (e.g. via Telegram tool call)
+    const fetchMemoriesRef = useRef(fetchMemories);
+    useEffect(() => { fetchMemoriesRef.current = fetchMemories; }, [fetchMemories]);
+    useEffect(() => {
+        const unlisten = listen<string>("memory:updated", (event) => {
+            // Only refresh if the updated character matches the currently viewed one
+            if (!event.payload || event.payload === selectedCharId) {
+                fetchMemoriesRef.current();
+            }
+        });
+        return () => { unlisten.then(fn => fn()); };
+    }, [selectedCharId]);
 
     // Filter client-side by search query (simple text match)
     const filtered = searchQuery.trim()
