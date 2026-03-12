@@ -42,6 +42,8 @@ export default function TelegramTab({ onConfigChange }: { onConfigChange?: (conf
             setConfig(cfg);
             setStatus(st);
             setCharacters(chars);
+            // 通知父组件初始配置，确保全局保存时能拿到值
+            onConfigChange?.(cfg);
         } catch (e) {
             console.error("[TelegramTab] Failed to load:", e);
         } finally {
