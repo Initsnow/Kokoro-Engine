@@ -538,7 +538,7 @@ export default function VisionTab() {
                                     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                                     if (e.key === "Escape") setEditingInterval(false);
                                 }}
-                                className="w-20 px-2 py-0.5 rounded text-sm text-right font-mono bg-[var(--color-bg-surface)] border border-[var(--color-accent)] text-[var(--color-accent)] focus:outline-none"
+                                className="w-20 px-2 py-0.5 rounded text-sm text-right font-mono bg-[var(--color-bg-surface)] border border-[var(--color-accent)] text-[var(--color-accent)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                         ) : (
                             <span
