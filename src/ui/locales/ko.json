@@ -447,7 +447,9 @@
             "api_key": "API 키",
             "interval": {
                 "label": "캡처 간격",
-                "desc": "낮을수록 반응이 빠르지만 리소스를 더 많이 사용합니다"
+                "desc": "낮을수록 반응이 빠르지만 리소스를 더 많이 사용합니다",
+                "dblclick_hint": "더블클릭으로 직접 입력",
+                "custom": "사용자 지정"
             },
             "sensitivity": {
                 "label": "변화 민감도",

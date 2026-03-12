@@ -448,7 +448,9 @@
             "api_key": "API 密钥",
             "interval": {
                 "label": "捕获间隔",
-                "desc": "值越低响应越快，但资源占用越高"
+                "desc": "值越低响应越快，但资源占用越高",
+                "dblclick_hint": "双击可输入自定义秒数",
+                "custom": "自定义"
             },
             "sensitivity": {
                 "label": "变化灵敏度",

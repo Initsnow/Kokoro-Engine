@@ -22,6 +22,8 @@ export default function VisionTab() {
     const [ollamaModels, setOllamaModels] = useState<OllamaModelInfo[]>([]);
     const [ollamaReachable, setOllamaReachable] = useState(true);
     const [dirty, setDirty] = useState(false);
+    const [editingInterval, setEditingInterval] = useState(false);
+    const [intervalInput, setIntervalInput] = useState("");
 
     // ── Model install state ──
     const [pulling, setPulling] = useState(false);
@@ -520,19 +522,53 @@ export default function VisionTab() {
                                 {t("settings.vision.interval.label")}
                             </label>
                         </div>
-                        <span className="text-sm text-[var(--color-accent)] font-mono">{config.interval_secs}s</span>
+                        {editingInterval ? (
+                            <input
+                                type="number"
+                                min={5}
+                                autoFocus
+                                value={intervalInput}
+                                onChange={(e) => setIntervalInput(e.target.value)}
+                                onBlur={() => {
+                                    const v = parseInt(intervalInput, 10);
+                                    if (!isNaN(v) && v >= 5) update({ interval_secs: v });
+                                    setEditingInterval(false);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                    if (e.key === "Escape") setEditingInterval(false);
+                                }}
+                                className="w-20 px-2 py-0.5 rounded text-sm text-right font-mono bg-[var(--color-bg-surface)] border border-[var(--color-accent)] text-[var(--color-accent)] focus:outline-none"
+                            />
+                        ) : (
+                            <span
+                                className="text-sm text-[var(--color-accent)] font-mono cursor-pointer select-none"
+                                title={t("settings.vision.interval.dblclick_hint")}
+                                onDoubleClick={() => {
+                                    setIntervalInput(String(config.interval_secs));
+                                    setEditingInterval(true);
+                                }}
+                            >
+                                {config.interval_secs}s
+                            </span>
+                        )}
                     </div>
                     <input
                         type="range"
                         min={5}
                         max={60}
                         step={5}
-                        value={config.interval_secs}
+                        value={Math.min(config.interval_secs, 60)}
                         onChange={(e) => update({ interval_secs: Number(e.target.value) })}
                         className="w-full accent-[var(--color-accent)]"
                     />
                     <p className="text-xs text-[var(--color-text-muted)]">
                         {t("settings.vision.interval.desc")}
+                        {config.interval_secs > 60 && (
+                            <span className="ml-1 text-[var(--color-accent)]">
+                                ({t("settings.vision.interval.custom")})
+                            </span>
+                        )}
                     </p>
                 </div>
 

@@ -448,7 +448,9 @@
             "api_key": "API Key",
             "interval": {
                 "label": "Capture Interval",
-                "desc": "Lower = more responsive but uses more resources"
+                "desc": "Lower = more responsive but uses more resources",
+                "dblclick_hint": "Double-click to enter a custom value",
+                "custom": "custom"
             },
             "sensitivity": {
                 "label": "Change Sensitivity",
