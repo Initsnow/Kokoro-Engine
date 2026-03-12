@@ -490,7 +490,10 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
                                 <McpTab />
                             )}
                             {activeTab === "telegram" && (
-                                <TelegramTab onConfigChange={setLocalTelegramConfig} />
+                                <TelegramTab
+                                    config={localTelegramConfig}
+                                    onUpdate={(patch) => setLocalTelegramConfig(prev => prev ? { ...prev, ...patch } : prev)}
+                                />
                             )}
                             {activeTab === "jailbreak" && (
                                 <JailbreakTab />

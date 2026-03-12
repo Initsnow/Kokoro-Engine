@@ -4,7 +4,7 @@ import { clsx } from "clsx";
 import { Bot, Shield, Volume2, Loader2, Play, Square, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
-    getTelegramConfig, saveTelegramConfig,
+    saveTelegramConfig,
     startTelegramBot, stopTelegramBot, getTelegramStatus,
 } from "../../../lib/kokoro-bridge";
 import type { TelegramConfig, TelegramStatus } from "../../../lib/kokoro-bridge";
@@ -12,9 +12,13 @@ import { characterDb } from "../../../lib/db";
 import type { CharacterProfile } from "../../../lib/db";
 import { inputClasses, labelClasses } from "../../styles/settings-primitives";
 
-export default function TelegramTab({ onConfigChange }: { onConfigChange?: (config: TelegramConfig) => void }) {
+interface TelegramTabProps {
+    config: TelegramConfig | null;
+    onUpdate: (patch: Partial<TelegramConfig>) => void;
+}
+
+export default function TelegramTab({ config, onUpdate }: TelegramTabProps) {
     const { t } = useTranslation();
-    const [config, setConfig] = useState<TelegramConfig | null>(null);
     const [status, setStatus] = useState<TelegramStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [dirty, setDirty] = useState(false);
@@ -23,7 +27,7 @@ export default function TelegramTab({ onConfigChange }: { onConfigChange?: (conf
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
-        loadAll();
+        loadStatus();
         pollRef.current = setInterval(() => {
             getTelegramStatus().then(setStatus).catch(() => {});
         }, 5000);
@@ -32,29 +36,24 @@ export default function TelegramTab({ onConfigChange }: { onConfigChange?: (conf
         };
     }, []);
 
-    const loadAll = async () => {
+    const loadStatus = async () => {
         try {
-            const [cfg, st, chars] = await Promise.all([
-                getTelegramConfig(),
+            const [st, chars] = await Promise.all([
                 getTelegramStatus(),
                 characterDb.getAll(),
             ]);
-            setConfig(cfg);
             setStatus(st);
             setCharacters(chars);
         } catch (e) {
-            console.error("[TelegramTab] Failed to load:", e);
+            console.error("[TelegramTab] Failed to load status:", e);
         } finally {
             setLoading(false);
         }
     };
 
     const update = (patch: Partial<TelegramConfig>) => {
-        if (!config) return;
-        const updated = { ...config, ...patch };
-        setConfig(updated);
+        onUpdate(patch);
         setDirty(true);
-        onConfigChange?.(updated);
     };
 
     const handleStart = async () => {
@@ -82,8 +81,9 @@ export default function TelegramTab({ onConfigChange }: { onConfigChange?: (conf
     };
 
     const addChatId = () => {
+        if (!config) return;
         const id = parseInt(chatIdInput.trim(), 10);
-        if (isNaN(id) || !config) return;
+        if (isNaN(id)) return;
         if (config.allowed_chat_ids.includes(id)) return;
         update({ allowed_chat_ids: [...config.allowed_chat_ids, id] });
         setChatIdInput("");
@@ -94,15 +94,13 @@ export default function TelegramTab({ onConfigChange }: { onConfigChange?: (conf
         update({ allowed_chat_ids: config.allowed_chat_ids.filter(c => c !== id) });
     };
 
-    if (loading) {
+    if (loading || !config) {
         return (
             <div className="flex items-center justify-center py-12">
                 <Loader2 size={20} className="animate-spin text-[var(--color-text-muted)]" />
             </div>
         );
     }
-
-    if (!config) return null;
 
     const isRunning = status?.running ?? false;
 
@@ -146,7 +144,7 @@ export default function TelegramTab({ onConfigChange }: { onConfigChange?: (conf
                     )}
                     <motion.button
                         whileTap={{ scale: 0.95 }}
-                        onClick={loadAll}
+                        onClick={loadStatus}
                         className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
                     >
                         <RefreshCw size={14} />
