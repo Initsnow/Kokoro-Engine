@@ -803,6 +803,10 @@ export interface TelegramStatus {
     has_token: boolean;
 }
 
+export async function listCharacterIds(): Promise<string[]> {
+    return invoke<string[]>("list_character_ids");
+}
+
 export async function getTelegramConfig(): Promise<TelegramConfig> {
     return invoke<TelegramConfig>("get_telegram_config");
 }

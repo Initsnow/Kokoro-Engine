@@ -94,6 +94,7 @@ pub fn run() {
             commands::conversation::delete_conversation,
             commands::conversation::create_conversation,
             commands::conversation::rename_conversation,
+            commands::conversation::list_character_ids,
             commands::llm::get_llm_config,
             commands::llm::save_llm_config,
             commands::llm::list_ollama_models,

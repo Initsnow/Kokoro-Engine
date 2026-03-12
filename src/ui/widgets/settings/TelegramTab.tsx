@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import {
     getTelegramConfig, saveTelegramConfig,
     startTelegramBot, stopTelegramBot, getTelegramStatus,
+    listCharacterIds,
 } from "../../../lib/kokoro-bridge";
 import type { TelegramConfig, TelegramStatus } from "../../../lib/kokoro-bridge";
 import { inputClasses, labelClasses } from "../../styles/settings-primitives";
@@ -17,6 +18,7 @@ export default function TelegramTab() {
     const [loading, setLoading] = useState(true);
     const [dirty, setDirty] = useState(false);
     const [chatIdInput, setChatIdInput] = useState("");
+    const [characterIds, setCharacterIds] = useState<string[]>([]);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
@@ -31,9 +33,14 @@ export default function TelegramTab() {
 
     const loadAll = async () => {
         try {
-            const [cfg, st] = await Promise.all([getTelegramConfig(), getTelegramStatus()]);
+            const [cfg, st, ids] = await Promise.all([
+                getTelegramConfig(),
+                getTelegramStatus(),
+                listCharacterIds(),
+            ]);
             setConfig(cfg);
             setStatus(st);
+            setCharacterIds(ids);
         } catch (e) {
             console.error("[TelegramTab] Failed to load:", e);
         } finally {
@@ -245,13 +252,16 @@ export default function TelegramTab() {
             {/* Character ID */}
             <div>
                 <label className={labelClasses}>{t("telegram.character_id.label")}</label>
-                <input
-                    type="text"
+                <select
                     value={config.character_id ?? ""}
                     onChange={e => update({ character_id: e.target.value || undefined })}
-                    placeholder={t("telegram.character_id.placeholder")}
                     className={inputClasses}
-                />
+                >
+                    <option value="">{t("telegram.character_id.auto")}</option>
+                    {characterIds.map(id => (
+                        <option key={id} value={id}>{id}</option>
+                    ))}
+                </select>
                 <div className="text-xs text-[var(--color-text-muted)] mt-1">
                     {t("telegram.character_id.hint")}
                 </div>

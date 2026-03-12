@@ -133,6 +133,23 @@ pub async fn delete_conversation(
 }
 
 #[tauri::command]
+pub async fn list_character_ids(
+    state: State<'_, AIOrchestrator>,
+) -> Result<Vec<String>, String> {
+    let rows = sqlx::query_as::<_, (String,)>(
+        "SELECT DISTINCT character_id FROM conversations
+         UNION
+         SELECT DISTINCT character_id FROM memories
+         ORDER BY character_id ASC"
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
+#[tauri::command]
 pub async fn create_conversation(
     state: State<'_, AIOrchestrator>,
 ) -> Result<String, String> {
