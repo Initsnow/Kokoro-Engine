@@ -14,7 +14,9 @@ pub struct MemoryManager {
 const MEMORY_HALF_LIFE_DAYS: f64 = 30.0;
 
 /// Cosine similarity threshold above which a new memory is considered a duplicate.
-const DEDUP_THRESHOLD: f32 = 0.85;
+/// 0.95+ = near-identical wording; 0.85 was too aggressive and collapsed distinct memories
+/// about the same topic/person into false duplicates.
+const DEDUP_THRESHOLD: f32 = 0.95;
 
 /// Cosine similarity threshold for memory consolidation clustering.
 const CONSOLIDATION_THRESHOLD: f32 = 0.75;
@@ -206,6 +208,7 @@ impl MemoryManager {
             let sim = cosine_similarity(new_embedding, &existing);
             if sim > DEDUP_THRESHOLD {
                 let id: i64 = row.get("id");
+                println!("[Memory] Dedup: similarity={:.3} > {:.3}, refreshing id={}", sim, DEDUP_THRESHOLD, id);
                 // Refresh updated_at only — created_at must remain immutable
                 sqlx::query("UPDATE memories SET updated_at = ? WHERE id = ?")
                     .bind(now)
@@ -239,6 +242,7 @@ impl MemoryManager {
             let sim = cosine_similarity(new_embedding, &existing);
             if sim > DEDUP_THRESHOLD {
                 let id: i64 = row.get("id");
+                println!("[Memory] Dedup-upgrade: similarity={:.3} > {:.3}, upgrading id={}", sim, DEDUP_THRESHOLD, id);
                 let existing_importance: f64 = row.get("importance");
                 let best_importance = existing_importance.max(new_importance);
                 let tier = if best_importance >= 0.8 {
