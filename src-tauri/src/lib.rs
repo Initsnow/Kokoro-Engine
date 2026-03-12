@@ -45,6 +45,7 @@ pub fn run() {
             commands::chat::set_context_settings,
             commands::context::set_persona,
             commands::context::set_character_name,
+            commands::context::set_active_character_id,
             commands::context::set_user_name,
             commands::context::get_emotion_state,
             commands::context::set_response_language,

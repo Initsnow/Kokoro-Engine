@@ -32,6 +32,13 @@ pub async fn set_character_name(name: String, state: State<'_, AIOrchestrator>) 
 }
 
 #[tauri::command]
+pub async fn set_active_character_id(id: String, state: State<'_, AIOrchestrator>) -> Result<(), String> {
+    state.set_character_id(id.clone()).await;
+    crate::ai::context::AIOrchestrator::persist_active_character_id(&id);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn set_user_name(name: String, state: State<'_, AIOrchestrator>) -> Result<(), String> {
     state.set_user_name(name).await;
     Ok(())

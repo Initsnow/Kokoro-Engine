@@ -507,6 +507,30 @@ impl AIOrchestrator {
         }
     }
 
+    /// Persist the active character ID to disk so Telegram can read it.
+    pub fn persist_active_character_id(id: &str) {
+        let app_data = dirs_next::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("com.chyin.kokoro");
+        let _ = std::fs::create_dir_all(&app_data);
+        let path = app_data.join("active_character_id.json");
+        let json = serde_json::json!({ "character_id": id });
+        if let Err(e) = std::fs::write(&path, json.to_string()) {
+            eprintln!("[Context] Failed to persist active_character_id: {}", e);
+        }
+    }
+
+    /// Load the persisted active character ID from disk.
+    pub fn load_active_character_id() -> Option<String> {
+        let path = dirs_next::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("com.chyin.kokoro")
+            .join("active_character_id.json");
+        let content = std::fs::read_to_string(&path).ok()?;
+        let v: serde_json::Value = serde_json::from_str(&content).ok()?;
+        v["character_id"].as_str().map(|s| s.to_string())
+    }
+
     /// Insert a streaming assistant draft into the DB. Returns the row id for later update.
     pub async fn persist_streaming_draft(&self, content: &str, character_id: &str) -> Result<i64> {
         let cid = character_id;

@@ -256,7 +256,8 @@ async fn handle_text(
     // 1. Record user message
     let char_id = match config.character_id.as_deref().filter(|s| !s.is_empty()) {
         Some(id) => id.to_string(),
-        None => orchestrator.get_character_id().await,
+        None => crate::ai::context::AIOrchestrator::load_active_character_id()
+            .unwrap_or_else(|| "default".to_string()),
     };
     orchestrator
         .add_message("user".to_string(), text.to_string(), &char_id)
@@ -577,7 +578,8 @@ async fn handle_photo(
     // 1. Record user message
     let char_id = match config.character_id.as_deref().filter(|s| !s.is_empty()) {
         Some(id) => id.to_string(),
-        None => orchestrator.get_character_id().await,
+        None => crate::ai::context::AIOrchestrator::load_active_character_id()
+            .unwrap_or_else(|| "default".to_string()),
     };
     orchestrator
         .add_message("user".to_string(), caption.clone(), &char_id)
