@@ -685,9 +685,9 @@
         },
         "voice_reply": "Send voice replies (TTS)",
         "character_id": {
-            "label": "Character ID",
+            "label": "Bound Character",
             "auto": "Auto (use currently active character)",
-            "hint": "Bind Telegram conversations to a specific character (same as shown in the memory page)"
+            "hint": "Telegram conversation memory and history will be attributed to the selected character"
         },
         "save": "Save",
         "start": "Start",

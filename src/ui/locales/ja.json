@@ -684,9 +684,9 @@
         },
         "voice_reply": "音声返信を送信（TTS）",
         "character_id": {
-            "label": "キャラクター ID",
+            "label": "紐付けキャラクター",
             "auto": "自動（現在のアクティブキャラクターを使用）",
-            "hint": "Telegram の会話を特定のキャラクターに紐付けます（メモリページに表示される character_id と同じ）"
+            "hint": "Telegram の会話の記憶と履歴が選択したキャラクターに帰属します"
         },
         "save": "保存",
         "start": "開始",

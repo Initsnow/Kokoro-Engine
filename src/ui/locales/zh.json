@@ -685,9 +685,9 @@
         },
         "voice_reply": "发送语音回复（TTS）",
         "character_id": {
-            "label": "角色 ID",
+            "label": "绑定角色",
             "auto": "自动（使用当前活跃角色）",
-            "hint": "指定 Telegram 对话绑定的角色，与记忆页面显示的 character_id 一致"
+            "hint": "选择后，Telegram 对话的记忆和历史将归属于该角色"
         },
         "save": "保存",
         "start": "启动",
