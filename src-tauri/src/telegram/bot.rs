@@ -266,9 +266,18 @@ async fn handle_text(
         translation: None,
     });
 
-    // 2. Compose prompt context
+    // 2. Compose prompt context (with tool prompt)
+    let action_registry = app
+        .try_state::<Arc<RwLock<crate::actions::ActionRegistry>>>()
+        .ok_or("ActionRegistry not available")?;
+    let tool_prompt = {
+        let registry = action_registry.read().await;
+        let p = registry.generate_tool_prompt();
+        if p.is_empty() { None } else { Some(p) }
+    };
+
     let prompt_messages = orchestrator
-        .compose_prompt(text, false, None, &char_id)
+        .compose_prompt(text, false, tool_prompt, &char_id)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -292,23 +301,91 @@ async fn handle_text(
         });
     }
 
-    // 3. Stream LLM response (collect fully)
+    // 3. LLM call with tool execution loop (max 5 rounds)
     let provider = llm_service.provider().await;
-    let mut stream = provider
-        .chat_stream(client_messages, None)
-        .await
-        .map_err(|e| format!("LLM stream error: {}", e))?;
+    const MAX_TOOL_ROUNDS: usize = 5;
+    let mut all_cleaned_text = String::new();
+    let mut all_translations: Vec<String> = Vec::new();
 
-    let mut response = String::new();
-    while let Some(result) = stream.next().await {
-        match result {
-            Ok(delta) => response.push_str(&delta),
-            Err(e) => {
-                eprintln!("[Telegram] LLM stream error: {}", e);
-                break;
+    for _round in 0..MAX_TOOL_ROUNDS {
+        let mut stream = provider
+            .chat_stream(client_messages.clone(), None)
+            .await
+            .map_err(|e| format!("LLM stream error: {}", e))?;
+
+        let mut response = String::new();
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(delta) => response.push_str(&delta),
+                Err(e) => {
+                    eprintln!("[Telegram] LLM stream error: {}", e);
+                    break;
+                }
             }
         }
+
+        if response.is_empty() {
+            break;
+        }
+
+        let (cleaned, tool_calls) = parse_tool_call_tags(&response);
+        let (cleaned, round_translation) = extract_translate_tags(&cleaned);
+        let cleaned = strip_leaked_tags(&cleaned);
+
+        if let Some(t) = round_translation {
+            all_translations.push(t);
+        }
+        if !cleaned.is_empty() {
+            if !all_cleaned_text.is_empty() { all_cleaned_text.push(' '); }
+            all_cleaned_text.push_str(&cleaned);
+        }
+
+        if tool_calls.is_empty() {
+            break;
+        }
+
+        // Execute tool calls
+        let registry = action_registry.read().await;
+        let mut tool_results = Vec::new();
+        let mut any_needs_feedback = false;
+        for tc in &tool_calls {
+            if registry.needs_feedback(&tc.name) {
+                any_needs_feedback = true;
+            }
+            let ctx = crate::actions::registry::ActionContext {
+                app: app.clone(),
+                character_id: char_id.clone(),
+            };
+            match registry.execute(&tc.name, tc.args.clone(), ctx).await {
+                Ok(result) => tool_results.push(format!("- {}: {}", tc.name, result.message)),
+                Err(e) => tool_results.push(format!("- {}: Error: {}", tc.name, e.0)),
+            }
+        }
+        drop(registry);
+
+        if !any_needs_feedback {
+            break;
+        }
+
+        client_messages.push(crate::llm::openai::Message {
+            role: "assistant".to_string(),
+            content: crate::llm::openai::MessageContent::Text(response),
+        });
+        client_messages.push(crate::llm::openai::Message {
+            role: "system".to_string(),
+            content: crate::llm::openai::MessageContent::Text(format!(
+                "[Tool results]\n{}\nContinue your response naturally.",
+                tool_results.join("\n")
+            )),
+        });
     }
+
+    let response = strip_control_tags(&compact_newlines(&all_cleaned_text));
+    let translation = if all_translations.is_empty() {
+        None
+    } else {
+        Some(compact_newlines(&all_translations.join(" ")))
+    };
 
     if response.is_empty() {
         bot.send_message(chat_id, "(No response from AI)")
@@ -317,21 +394,12 @@ async fn handle_text(
         return Ok(());
     }
 
-    // 4. Parse tool calls and translations, clean response
-    let (cleaned, _tool_calls) = parse_tool_call_tags(&response);
-    let (cleaned, translation) = extract_translate_tags(&cleaned);
-    let cleaned = strip_leaked_tags(&cleaned);
-    // Strip remaining control tags that shouldn't appear in Telegram
-    let cleaned = strip_control_tags(&cleaned);
-    let cleaned = compact_newlines(&cleaned);
-    let translation = translation.map(|t| compact_newlines(&t));
-
     // 5. Persist assistant message
     let metadata = translation
         .as_ref()
         .map(|t| serde_json::json!({ "translation": t }).to_string());
     orchestrator
-        .add_message_with_metadata("assistant".to_string(), cleaned.clone(), metadata, &char_id)
+        .add_message_with_metadata("assistant".to_string(), response.clone(), metadata, &char_id)
         .await;
 
     // Trigger periodic memory extraction (every 5 user messages)
@@ -376,15 +444,15 @@ async fn handle_text(
     // Sync assistant message to desktop UI
     let _ = app.emit("telegram:chat-sync", TelegramChatSync {
         role: "assistant".to_string(),
-        text: cleaned.clone(),
+        text: response.clone(),
         translation: translation.clone(),
     });
 
     // 6. Build reply text (include translation if present)
     let reply_text = if let Some(ref t) = translation {
-        format!("{}\n\n📝 {}", cleaned, t)
+        format!("{}\n\n📝 {}", response, t)
     } else {
-        cleaned.clone()
+        response.clone()
     };
 
     // 7. Send text reply
@@ -392,7 +460,7 @@ async fn handle_text(
 
     // 8. Optionally send voice reply
     if config.send_voice_reply {
-        send_voice_reply(bot, chat_id, &cleaned, app).await;
+        send_voice_reply(bot, chat_id, &response, app).await;
     }
 
     // 9. Handle image generation tags
@@ -516,9 +584,18 @@ async fn handle_photo(
         translation: None,
     });
 
-    // 2. Compose prompt context
+    // 2. Compose prompt context (with tool prompt)
+    let action_registry = app
+        .try_state::<Arc<RwLock<crate::actions::ActionRegistry>>>()
+        .ok_or("ActionRegistry not available")?;
+    let tool_prompt = {
+        let registry = action_registry.read().await;
+        let p = registry.generate_tool_prompt();
+        if p.is_empty() { None } else { Some(p) }
+    };
+
     let prompt_messages = orchestrator
-        .compose_prompt(&caption, false, None, &char_id)
+        .compose_prompt(&caption, false, tool_prompt, &char_id)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -536,7 +613,6 @@ async fn handle_photo(
         .map(|m| m.role == "user")
         .unwrap_or(false);
     if already_has_user {
-        // Replace last user message with multimodal version
         let last = client_messages.last_mut().unwrap();
         last.content = crate::llm::openai::MessageContent::with_images(
             caption.clone(),
@@ -552,23 +628,90 @@ async fn handle_photo(
         });
     }
 
-    // 3. Stream LLM response
+    // 3. LLM call with tool execution loop (max 5 rounds)
     let provider = llm_service.provider().await;
-    let mut stream = provider
-        .chat_stream(client_messages, None)
-        .await
-        .map_err(|e| format!("LLM stream error: {}", e))?;
+    const MAX_TOOL_ROUNDS: usize = 5;
+    let mut all_cleaned_text = String::new();
+    let mut all_translations: Vec<String> = Vec::new();
 
-    let mut response = String::new();
-    while let Some(result) = stream.next().await {
-        match result {
-            Ok(delta) => response.push_str(&delta),
-            Err(e) => {
-                eprintln!("[Telegram] LLM stream error: {}", e);
-                break;
+    for _round in 0..MAX_TOOL_ROUNDS {
+        let mut stream = provider
+            .chat_stream(client_messages.clone(), None)
+            .await
+            .map_err(|e| format!("LLM stream error: {}", e))?;
+
+        let mut round_response = String::new();
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(delta) => round_response.push_str(&delta),
+                Err(e) => {
+                    eprintln!("[Telegram] LLM stream error: {}", e);
+                    break;
+                }
             }
         }
+
+        if round_response.is_empty() {
+            break;
+        }
+
+        let (cleaned, tool_calls) = parse_tool_call_tags(&round_response);
+        let (cleaned, round_translation) = extract_translate_tags(&cleaned);
+        let cleaned = strip_leaked_tags(&cleaned);
+
+        if let Some(t) = round_translation {
+            all_translations.push(t);
+        }
+        if !cleaned.is_empty() {
+            if !all_cleaned_text.is_empty() { all_cleaned_text.push(' '); }
+            all_cleaned_text.push_str(&cleaned);
+        }
+
+        if tool_calls.is_empty() {
+            break;
+        }
+
+        let registry = action_registry.read().await;
+        let mut tool_results = Vec::new();
+        let mut any_needs_feedback = false;
+        for tc in &tool_calls {
+            if registry.needs_feedback(&tc.name) {
+                any_needs_feedback = true;
+            }
+            let ctx = crate::actions::registry::ActionContext {
+                app: app.clone(),
+                character_id: char_id.clone(),
+            };
+            match registry.execute(&tc.name, tc.args.clone(), ctx).await {
+                Ok(result) => tool_results.push(format!("- {}: {}", tc.name, result.message)),
+                Err(e) => tool_results.push(format!("- {}: Error: {}", tc.name, e.0)),
+            }
+        }
+        drop(registry);
+
+        if !any_needs_feedback {
+            break;
+        }
+
+        client_messages.push(crate::llm::openai::Message {
+            role: "assistant".to_string(),
+            content: crate::llm::openai::MessageContent::Text(round_response),
+        });
+        client_messages.push(crate::llm::openai::Message {
+            role: "system".to_string(),
+            content: crate::llm::openai::MessageContent::Text(format!(
+                "[Tool results]\n{}\nContinue your response naturally.",
+                tool_results.join("\n")
+            )),
+        });
     }
+
+    let response = strip_control_tags(&compact_newlines(&all_cleaned_text));
+    let translation = if all_translations.is_empty() {
+        None
+    } else {
+        Some(compact_newlines(&all_translations.join(" ")))
+    };
 
     if response.is_empty() {
         bot.send_message(chat_id, "(No response from AI)")
@@ -577,20 +720,12 @@ async fn handle_photo(
         return Ok(());
     }
 
-    // 4. Clean response
-    let (cleaned, _tool_calls) = parse_tool_call_tags(&response);
-    let (cleaned, translation) = extract_translate_tags(&cleaned);
-    let cleaned = strip_leaked_tags(&cleaned);
-    let cleaned = strip_control_tags(&cleaned);
-    let cleaned = compact_newlines(&cleaned);
-    let translation = translation.map(|t| compact_newlines(&t));
-
     // 5. Persist
     let metadata = translation
         .as_ref()
         .map(|t| serde_json::json!({ "translation": t }).to_string());
     orchestrator
-        .add_message_with_metadata("assistant".to_string(), cleaned.clone(), metadata, &char_id)
+        .add_message_with_metadata("assistant".to_string(), response.clone(), metadata, &char_id)
         .await;
 
     // Trigger periodic memory extraction (every 5 user messages)
@@ -635,21 +770,21 @@ async fn handle_photo(
     // Sync to desktop
     let _ = app.emit("telegram:chat-sync", TelegramChatSync {
         role: "assistant".to_string(),
-        text: cleaned.clone(),
+        text: response.clone(),
         translation: translation.clone(),
     });
 
     // 6. Reply
     let reply_text = if let Some(ref t) = translation {
-        format!("{}\n\n📝 {}", cleaned, t)
+        format!("{}\n\n📝 {}", response, t)
     } else {
-        cleaned.clone()
+        response.clone()
     };
     bot.send_message(chat_id, &reply_text).await.ok();
 
     // 7. Voice reply
     if config.send_voice_reply {
-        send_voice_reply(bot, chat_id, &cleaned, app).await;
+        send_voice_reply(bot, chat_id, &response, app).await;
     }
 
     Ok(())
@@ -737,31 +872,89 @@ async fn handle_image_tags(bot: &Bot, chat_id: ChatId, response: &str, app: &tau
 const TOOL_CALL_TAG_PREFIX: &str = "[TOOL_CALL:";
 const TRANSLATE_TAG_PREFIX: &str = "[TRANSLATE:";
 
-fn parse_tool_call_tags(text: &str) -> (String, Vec<String>) {
+#[derive(Debug, Clone)]
+struct ToolCall {
+    name: String,
+    args: HashMap<String, String>,
+}
+
+fn parse_tool_call_tags(text: &str) -> (String, Vec<ToolCall>) {
     let mut result = text.to_string();
     let mut calls = Vec::new();
 
+    // Parse [TOOL_CALL:name|key=val|...] format
     while let Some(start) = result.rfind(TOOL_CALL_TAG_PREFIX) {
         let rest = &result[start..];
         if let Some(end_bracket) = rest.find(']') {
             let inner = &rest[TOOL_CALL_TAG_PREFIX.len()..end_bracket];
-            calls.push(inner.to_string());
+            let parts: Vec<&str> = inner.split('|').collect();
+            if let Some(name) = parts.first() {
+                let name = name.trim().to_string();
+                let mut args = HashMap::new();
+                for part in parts.iter().skip(1) {
+                    if let Some(eq_pos) = part.find('=') {
+                        let key = part[..eq_pos].trim().to_string();
+                        let val = part[eq_pos + 1..].trim().to_string();
+                        args.insert(key, val);
+                    }
+                }
+                calls.push(ToolCall { name, args });
+            }
             let tag_end = start + end_bracket + 1;
             result = format!(
                 "{}{}",
                 result[..start].trim_end(),
-                if tag_end < result.len() {
-                    &result[tag_end..]
-                } else {
-                    ""
-                }
+                if tag_end < result.len() { &result[tag_end..] } else { "" }
             );
         } else {
             break;
         }
     }
+
+    // Also parse simplified [action_name|key=val] format
+    let mut extra_calls = Vec::new();
+    let mut cleaned = result.clone();
+    let mut offset = 0;
+    while offset < cleaned.len() {
+        let Some(rel_start) = cleaned[offset..].find('[') else { break };
+        let start = offset + rel_start;
+        let rest = &cleaned[start..];
+        let Some(end) = rest.find(']') else { break };
+        let inner = &rest[1..end];
+        let mut matched = false;
+        if let Some(pipe_pos) = inner.find('|') {
+            let name_part = &inner[..pipe_pos];
+            let is_identifier = !name_part.is_empty()
+                && name_part.chars().all(|c| c.is_alphanumeric() || c == '_');
+            let has_kv = inner[pipe_pos + 1..].contains('=');
+            if is_identifier && has_kv {
+                let parts: Vec<&str> = inner.split('|').collect();
+                let name = parts[0].trim().to_string();
+                let mut args = HashMap::new();
+                for part in parts.iter().skip(1) {
+                    if let Some(eq_pos) = part.find('=') {
+                        let key = part[..eq_pos].trim().to_string();
+                        let val = part[eq_pos + 1..].trim().to_string();
+                        args.insert(key, val);
+                    }
+                }
+                extra_calls.push(ToolCall { name, args });
+                let tag_end = start + end + 1;
+                cleaned = format!(
+                    "{}{}",
+                    cleaned[..start].trim_end(),
+                    if tag_end < cleaned.len() { &cleaned[tag_end..] } else { "" }
+                );
+                matched = true;
+            }
+        }
+        if !matched {
+            offset = start + 1;
+        }
+    }
+    calls.extend(extra_calls);
     calls.reverse();
-    (result.trim().to_string(), calls)
+    (cleaned.trim().to_string(), calls)
 }
 
 fn extract_translate_tags(text: &str) -> (String, Option<String>) {
