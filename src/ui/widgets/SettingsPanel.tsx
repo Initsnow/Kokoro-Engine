@@ -135,10 +135,17 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
             setVoiceInterrupt(localStorage.getItem("kokoro_voice_interrupt") === "true");
             setResponseLang(localStorage.getItem("kokoro_response_language") || "");
             setUserLang(localStorage.getItem("kokoro_user_language") || "");
-            // Fetch backend data (TTS, ImageGen only — STT uses prop)
             fetchData();
         }
     }, [isOpen, displayMode, customModelPath, bg.config]);
+
+    // Load Telegram config only when panel first opens, not on every bg.config change
+    useEffect(() => {
+        if (isOpen) {
+            setLocalTelegramConfig(null); // reset so fetchTelegramConfig always loads fresh
+            fetchTelegramConfig();
+        }
+    }, [isOpen]);
 
     // Update local BG config helper
     const updateBgConfig = (update: Partial<BackgroundConfig>) => {
@@ -209,24 +216,29 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
     const fetchData = async () => {
         setIsTtsLoading(true);
         try {
-            const [providers, voices, ttsConfig, telegramConfig] = await Promise.all([
+            const [providers, voices, ttsConfig] = await Promise.all([
                 listTtsProviders(),
                 listTtsVoices(),
                 getTtsConfig(),
-                getTelegramConfig(),
             ]);
             setTtsProviders(providers);
             setTtsVoices(voices);
             setLocalTtsConfig(ttsConfig);
-            setLocalTelegramConfig(telegramConfig);
-            console.log("[SettingsPanel] Loaded telegram config:", JSON.stringify(telegramConfig));
-            // STT config: always fetch fresh from backend to reflect saved state
             const sttConfig = await getSttConfig();
             setLocalSttConfig(sttConfig);
         } catch (e) {
             console.error("[SettingsPanel] Failed to fetch data:", e);
         } finally {
             setIsTtsLoading(false);
+        }
+    };
+
+    const fetchTelegramConfig = async () => {
+        try {
+            const telegramConfig = await getTelegramConfig();
+            setLocalTelegramConfig(telegramConfig);
+        } catch (e) {
+            console.error("[SettingsPanel] Failed to fetch telegram config:", e);
         }
     };
 
@@ -315,7 +327,6 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
         }
 
         // Commit Telegram Config
-        console.log("[SettingsPanel] localTelegramConfig at save time:", JSON.stringify(localTelegramConfig));
         if (localTelegramConfig) {
             try {
                 await saveTelegramConfig(localTelegramConfig);
@@ -494,10 +505,7 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
                             {activeTab === "telegram" && (
                                 <TelegramTab
                                     config={localTelegramConfig}
-                                    onUpdate={(patch) => {
-                                        console.log("[SettingsPanel] TelegramTab onUpdate patch:", JSON.stringify(patch));
-                                        setLocalTelegramConfig(prev => prev ? { ...prev, ...patch } : prev);
-                                    }}
+                                    onUpdate={(patch) => setLocalTelegramConfig(prev => prev ? { ...prev, ...patch } : prev)}
                                 />
                             )}
                             {activeTab === "jailbreak" && (
