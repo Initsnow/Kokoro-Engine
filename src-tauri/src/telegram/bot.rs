@@ -256,11 +256,20 @@ async fn handle_text(
         .ok_or("LlmService not available")?;
 
     // 1. Record user message
+    // char_id 解析优先级：config 指定 > orchestrator 内存状态 > 磁盘文件 > "default"
     let char_id = match config.character_id.as_deref().filter(|s| !s.is_empty()) {
         Some(id) => id.to_string(),
-        None => crate::ai::context::AIOrchestrator::load_active_character_id()
-            .unwrap_or_else(|| "default".to_string()),
+        None => {
+            let mem_id = orchestrator.get_character_id().await;
+            if !mem_id.is_empty() && mem_id != "default" {
+                mem_id
+            } else {
+                crate::ai::context::AIOrchestrator::load_active_character_id()
+                    .unwrap_or_else(|| "default".to_string())
+            }
+        }
     };
+    println!("[Telegram] Resolved char_id='{}' for this request", char_id);
     orchestrator
         .add_message("user".to_string(), text.to_string(), &char_id)
         .await;
@@ -338,6 +347,8 @@ async fn handle_text(
         let (cleaned, round_translation) = extract_translate_tags(&cleaned);
         let cleaned = strip_leaked_tags(&cleaned);
 
+        println!("[Telegram] Tool loop round: {} tool_calls found, char_id='{}'", tool_calls.len(), char_id);
+
         if let Some(t) = round_translation {
             all_translations.push(t);
         }
@@ -355,6 +366,7 @@ async fn handle_text(
         let mut tool_results = Vec::new();
         let mut any_needs_feedback = false;
         for tc in &tool_calls {
+            println!("[Telegram/ToolCall] Executing: {} with args {:?}", tc.name, tc.args);
             if registry.needs_feedback(&tc.name) {
                 any_needs_feedback = true;
             }
@@ -363,8 +375,14 @@ async fn handle_text(
                 character_id: char_id.clone(),
             };
             match registry.execute(&tc.name, tc.args.clone(), ctx).await {
-                Ok(result) => tool_results.push(format!("- {}: {}", tc.name, result.message)),
-                Err(e) => tool_results.push(format!("- {}: Error: {}", tc.name, e.0)),
+                Ok(result) => {
+                    println!("[Telegram/ToolCall] {} => {}", tc.name, result.message);
+                    tool_results.push(format!("- {}: {}", tc.name, result.message));
+                }
+                Err(e) => {
+                    eprintln!("[Telegram/ToolCall] {} failed: {}", tc.name, e.0);
+                    tool_results.push(format!("- {}: Error: {}", tc.name, e.0));
+                }
             }
         }
         drop(registry);
@@ -578,11 +596,20 @@ async fn handle_photo(
     println!("[Telegram] Photo received, caption: {}", caption);
 
     // 1. Record user message
+    // char_id 解析优先级：config 指定 > orchestrator 内存状态 > 磁盘文件 > "default"
     let char_id = match config.character_id.as_deref().filter(|s| !s.is_empty()) {
         Some(id) => id.to_string(),
-        None => crate::ai::context::AIOrchestrator::load_active_character_id()
-            .unwrap_or_else(|| "default".to_string()),
+        None => {
+            let mem_id = orchestrator.get_character_id().await;
+            if !mem_id.is_empty() && mem_id != "default" {
+                mem_id
+            } else {
+                crate::ai::context::AIOrchestrator::load_active_character_id()
+                    .unwrap_or_else(|| "default".to_string())
+            }
+        }
     };
+    println!("[Telegram] Resolved char_id='{}' for photo request", char_id);
     orchestrator
         .add_message("user".to_string(), caption.clone(), &char_id)
         .await;
@@ -669,6 +696,8 @@ async fn handle_photo(
         let (cleaned, round_translation) = extract_translate_tags(&cleaned);
         let cleaned = strip_leaked_tags(&cleaned);
 
+        println!("[Telegram/Photo] Tool loop round: {} tool_calls found, char_id='{}'", tool_calls.len(), char_id);
+
         if let Some(t) = round_translation {
             all_translations.push(t);
         }
@@ -685,6 +714,7 @@ async fn handle_photo(
         let mut tool_results = Vec::new();
         let mut any_needs_feedback = false;
         for tc in &tool_calls {
+            println!("[Telegram/ToolCall] Executing: {} with args {:?}", tc.name, tc.args);
             if registry.needs_feedback(&tc.name) {
                 any_needs_feedback = true;
             }
@@ -693,8 +723,14 @@ async fn handle_photo(
                 character_id: char_id.clone(),
             };
             match registry.execute(&tc.name, tc.args.clone(), ctx).await {
-                Ok(result) => tool_results.push(format!("- {}: {}", tc.name, result.message)),
-                Err(e) => tool_results.push(format!("- {}: Error: {}", tc.name, e.0)),
+                Ok(result) => {
+                    println!("[Telegram/ToolCall] {} => {}", tc.name, result.message);
+                    tool_results.push(format!("- {}: {}", tc.name, result.message));
+                }
+                Err(e) => {
+                    eprintln!("[Telegram/ToolCall] {} failed: {}", tc.name, e.0);
+                    tool_results.push(format!("- {}: Error: {}", tc.name, e.0));
+                }
             }
         }
         drop(registry);
