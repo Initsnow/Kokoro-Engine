@@ -482,6 +482,17 @@ pub async fn stream_chat(
         })
         .collect();
 
+    // 注入视觉上下文（如果有最近的屏幕观察）
+    if let Some(vision_desc) = _vision_watcher.context.get_context_string().await {
+        client_messages.push(crate::llm::openai::Message {
+            role: "system".to_string(),
+            content: crate::llm::openai::MessageContent::Text(format!(
+                "[Vision] The user's screen currently shows: {}",
+                vision_desc
+            )),
+        });
+    }
+
     // Attach images to the last user message if present
     if let Some(images) = &request.images {
         if !images.is_empty() {

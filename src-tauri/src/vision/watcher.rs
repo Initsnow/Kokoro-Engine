@@ -9,7 +9,7 @@ use crate::vision::context::VisionContext;
 use reqwest::Client;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
 
 /// Shared handle to control the watcher loop.
@@ -97,6 +97,12 @@ impl VisionWatcher {
                             );
                             watcher.context.update(description.clone()).await;
                             let _ = app_handle.emit("vision-observation", &description);
+
+                            // 将屏幕观察推入好奇心队列，触发主动发言
+                            if let Some(orchestrator) = app_handle.try_state::<crate::ai::context::AIOrchestrator>() {
+                                let mut curiosity = orchestrator.curiosity.lock().await;
+                                curiosity.add_topic(&description, 0.8, "vision");
+                            }
                         }
                         Err(e) => {
                             eprintln!("[Vision] VLM analysis failed: {}", e);
