@@ -52,6 +52,9 @@ impl VisionWatcher {
 
             let client = watcher.client.clone();
             let mut prev_screenshot: Option<Vec<u8>> = None;
+            // 用一个足够久远的时间初始化，确保第一次触发不受冷却限制
+            let mut last_proactive_ts = std::time::Instant::now();
+            let mut proactive_initialized = false;
 
             loop {
                 if !watcher.running.load(Ordering::Relaxed) {
@@ -98,20 +101,26 @@ impl VisionWatcher {
                             watcher.context.update(description.clone()).await;
                             let _ = app_handle.emit("vision-observation", &description);
 
-                            // 直接触发主动发言，捕获间隔即评论间隔
-                            let instruction = format!(
-                                "You just noticed the user's screen changed. Current observation: {}. \
-                                React naturally — comment, ask, or just say something relevant. Keep it brief.",
-                                description
-                            );
-                            let _ = app_handle.emit(
-                                "proactive-trigger",
-                                serde_json::json!({
-                                    "trigger": "vision",
-                                    "idle_seconds": 0,
-                                    "instruction": instruction,
-                                }),
-                            );
+                            // 冷却检查：距上次 proactive 至少间隔 interval_secs
+                            let cooldown = std::time::Duration::from_secs(config.interval_secs as u64);
+                            let ready = !proactive_initialized || last_proactive_ts.elapsed() >= cooldown;
+                            if ready {
+                                proactive_initialized = true;
+                                last_proactive_ts = std::time::Instant::now();
+                                let instruction = format!(
+                                    "You just noticed the user's screen changed. Current observation: {}. \
+                                    React naturally — comment, ask, or just say something relevant. Keep it brief.",
+                                    description
+                                );
+                                let _ = app_handle.emit(
+                                    "proactive-trigger",
+                                    serde_json::json!({
+                                        "trigger": "vision",
+                                        "idle_seconds": 0,
+                                        "instruction": instruction,
+                                    }),
+                                );
+                            }
                         }
                         Err(e) => {
                             eprintln!("[Vision] VLM analysis failed: {}", e);

@@ -50,8 +50,9 @@ fn time_of_day_context() -> &'static str {
 pub async fn heartbeat_loop(app_handle: AppHandle) {
     let config = HeartbeatConfig::default();
     let mut last_proactive_ts = std::time::Instant::now();
-    let _last_time_period = current_time_period(); // Tracked for time-change triggers (future)
+    let _last_time_period = current_time_period();
     let mut last_prune_ts = std::time::Instant::now();
+    let mut last_snapshot_ts = std::time::Instant::now();
 
     loop {
         // Heartbeat tick rate: 5s when active, 30s when idle?
@@ -93,9 +94,9 @@ pub async fn heartbeat_loop(app_handle: AppHandle) {
             // Decay
             emotion.decay_toward_default();
 
-            // Snapshot
-            if idle_secs % 60 < 10 {
-                // Save roughly every minute
+            // Snapshot — at most once per 60 seconds
+            if last_snapshot_ts.elapsed().as_secs() >= 60 {
+                last_snapshot_ts = std::time::Instant::now();
                 let snap = emotion.snapshot();
                 let char_id = orchestrator.get_character_id().await;
                 let _ = orchestrator
