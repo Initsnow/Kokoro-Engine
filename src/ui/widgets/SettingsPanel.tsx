@@ -552,7 +552,7 @@ export default function SettingsPanel({ isOpen, onClose, backgroundControls, dis
                                         "hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors"
                                     )}
                                 >
-                                    Cancel
+                                    {t("common.actions.cancel")}
                                 </motion.button>
                                 <motion.button
                                     whileHover={{ scale: 1.05 }}
