@@ -149,18 +149,14 @@ impl AudioSource {
     pub fn duration_seconds(&self) -> f32 {
         match self {
             AudioSource::Chunk(chunk) => chunk.duration_seconds(),
-            AudioSource::Encoded { data, .. } => {
+            AudioSource::Encoded { .. } => {
                 // Approximate duration for encoded audio is hard without decoding.
                 // We'll use a rough heuristic: 1MB ~= 60s for mp3 (very rough).
                 // Or just return 0.0 and handle it in dynamic timeout logic (if 0, use default).
                 // Better: The User Blueprint asked for dynamic timeouts.
                 // We'll assume encoded files are handled safely by backend or we use a generous default.
                 // For now return 0.0 if unknown.
-                if data.is_empty() {
-                    0.0
-                } else {
-                    0.0
-                }
+                0.0
             }
         }
     }

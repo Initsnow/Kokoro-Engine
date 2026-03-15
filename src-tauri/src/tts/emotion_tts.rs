@@ -41,7 +41,7 @@ pub fn get_modifiers(emotion: &str, mood: f32) -> EmotionTtsModifiers {
         "shy" => (0.92, 0.03),       // Slightly slower + slightly higher
         "smug" => (0.95, -0.03),     // Slightly slower + slightly lower
         "worried" => (0.93, 0.02),   // Slightly slower + slightly higher
-        "neutral" | _ => (1.0, 0.0), // No modulation
+        _ => (1.0, 0.0), // No modulation
     };
 
     // Scale intensity by how extreme the mood is (distance from 0.5)

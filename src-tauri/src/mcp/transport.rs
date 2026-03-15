@@ -719,7 +719,6 @@ impl McpTransport for SseTransport {
             .map_err(|e| {
                 // Clean up pending on send failure
                 let pending = self.pending.clone();
-                let id = id;
                 tokio::spawn(async move {
                     pending.lock().await.remove(&id);
                 });
@@ -738,7 +737,6 @@ impl McpTransport for SseTransport {
             .await
             .map_err(|_| {
                 let pending = self.pending.clone();
-                let id = id;
                 tokio::spawn(async move {
                     pending.lock().await.remove(&id);
                 });
