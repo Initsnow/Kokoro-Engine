@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 
 #[derive(Clone, Serialize)]
@@ -23,6 +24,7 @@ pub struct ImageGenService {
     provider_configs: Arc<RwLock<HashMap<String, ImageGenProviderConfig>>>,
     default_provider: Arc<RwLock<Option<String>>>,
     output_dir: PathBuf,
+    generating: Arc<AtomicBool>,
 }
 
 impl ImageGenService {
@@ -42,6 +44,7 @@ impl ImageGenService {
             provider_configs: Arc::new(RwLock::new(HashMap::new())),
             default_provider: Arc::new(RwLock::new(config.default_provider.clone())),
             output_dir,
+            generating: Arc::new(AtomicBool::new(false)),
         };
 
         if !config.enabled {
@@ -104,6 +107,23 @@ impl ImageGenService {
     }
 
     pub async fn generate(
+        &self,
+        prompt: String,
+        provider_id: Option<String>,
+        params: Option<ImageGenParams>,
+        window_size: Option<(u32, u32)>,
+    ) -> Result<ImageGenResult, ImageGenError> {
+        // Drop background requests if a generation is already in flight
+        if self.generating.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            return Err(ImageGenError::ConfigError("Generation already in progress, skipping".to_string()));
+        }
+
+        let result = self.generate_inner(prompt, provider_id, params, window_size).await;
+        self.generating.store(false, Ordering::SeqCst);
+        result
+    }
+
+    async fn generate_inner(
         &self,
         prompt: String,
         provider_id: Option<String>,

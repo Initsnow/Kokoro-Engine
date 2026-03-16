@@ -19,7 +19,7 @@ impl StableDiffusionProvider {
             base_url: base_url.unwrap_or_else(|| "http://127.0.0.1:7860".to_string()),
             _model: model,
             client: Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
+                .timeout(std::time::Duration::from_secs(300))
                 .no_proxy()
                 .build()
                 .unwrap_or_default(),
