@@ -690,6 +690,35 @@ export default function ChatPanel() {
         setPendingImages(prev => prev.filter((_, i) => i !== index));
     };
 
+    // ── Clipboard paste image ────────────────────────────────
+    const handlePaste = async (e: React.ClipboardEvent) => {
+        const items = Array.from(e.clipboardData.items);
+        const imageItem = items.find(item => item.type.startsWith("image/"));
+        if (!imageItem) return;
+
+        e.preventDefault();
+        const file = imageItem.getAsFile();
+        if (!file) return;
+
+        if (file.size > 5 * 1024 * 1024) {
+            setError(t("chat.errors.image_too_large"));
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            const buffer = await file.arrayBuffer();
+            const bytes = Array.from(new Uint8Array(buffer));
+            const filename = `paste_${Date.now()}.png`;
+            const url = await uploadVisionImage(bytes, filename);
+            setPendingImages(prev => [...prev, url]);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : t("chat.errors.upload_failed"));
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     // ── STT: Advanced VAD Microphone toggle ─────────────────
     const handleMicToggle = useCallback(() => {
         if (voiceState === VoiceState.Idle) {
@@ -1083,6 +1112,7 @@ export default function ChatPanel() {
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
+                            onPaste={handlePaste}
                             placeholder={t("chat.input.placeholder")}
                             disabled={isStreaming}
                             className={clsx(
@@ -1140,6 +1170,7 @@ export default function ChatPanel() {
                             ref={expandedTextareaRef}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
+                            onPaste={handlePaste}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                                     e.preventDefault();
