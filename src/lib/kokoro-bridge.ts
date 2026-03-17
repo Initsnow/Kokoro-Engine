@@ -889,6 +889,7 @@ export interface ImportResult {
     imported_conversations: number;
     imported_configs: number;
     characters_json?: string;
+    debug_log?: string[];
 }
 
 export async function exportData(exportPath: string, charactersJson?: string): Promise<ExportResult> {

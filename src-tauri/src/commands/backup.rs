@@ -74,6 +74,7 @@ pub struct ImportResult {
     pub imported_conversations: i64,
     pub imported_configs: usize,
     pub characters_json: Option<String>,
+    pub debug_log: Vec<String>,
 }
 
 // ── Helpers ──────────────────────────────────────────
@@ -84,12 +85,8 @@ fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("Failed to resolve app data dir: {}", e))
 }
 
-fn db_path(_app_data: &Path) -> PathBuf {
-    // The DB uses a relative path "sqlite://kokoro.db" (see lib.rs),
-    // so it lives in the current working directory, not app_data_dir.
-    std::env::current_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join("kokoro.db")
+fn db_path(app_data: &Path) -> PathBuf {
+    app_data.join("kokoro.db")
 }
 
 pub fn db_path_pub(app_data: &Path) -> PathBuf {
@@ -532,6 +529,7 @@ pub async fn import_data(
         imported_conversations: 0,
         imported_configs: 0,
         characters_json,
+        debug_log: Vec::new(),
     };
 
     if has_db {
@@ -555,6 +553,7 @@ pub async fn import_data(
             .await
             .map_err(|e| format!("Failed to count import_db.memories: {}", e))?;
         println!("[Backup] import_db.memories count: {}", import_count);
+        result.debug_log.push(format!("import_db.memories count: {}", import_count));
 
         // 打印备份里实际的 character_id 分布
         let char_ids: Vec<String> = sqlx::query_scalar(
@@ -564,6 +563,8 @@ pub async fn import_data(
         .await
         .unwrap_or_default();
         println!("[Backup] import_db.memories character_ids: {:?}", char_ids);
+        result.debug_log.push(format!("import_db character_ids: {:?}", char_ids));
+        result.debug_log.push(format!("target_character_id: {:?}", options.target_character_id));
 
         if options.conflict_strategy == "overwrite" {
             // 先删除 FTS 触发器，避免批量操作时触发器访问损坏的 FTS 索引
@@ -583,11 +584,13 @@ pub async fn import_data(
                 .map_err(|e| format!("INSERT memories failed: {}", e))?;
             result.imported_memories = r.rows_affected() as i64;
             println!("[Backup] Inserted {} memories", result.imported_memories);
+            result.debug_log.push(format!("inserted memories: {}", result.imported_memories));
 
             let r = sqlx::query("INSERT INTO conversations SELECT * FROM import_db.conversations")
                 .execute(&mut *conn).await
                 .map_err(|e| format!("INSERT conversations failed: {}", e))?;
             result.imported_conversations = r.rows_affected() as i64;
+            result.debug_log.push(format!("inserted conversations: {}", result.imported_conversations));
 
             sqlx::query("INSERT INTO conversation_messages SELECT * FROM import_db.conversation_messages")
                 .execute(&mut *conn).await
@@ -607,11 +610,13 @@ pub async fn import_data(
                 .map_err(|e| format!("INSERT OR IGNORE memories failed: {}", e))?;
             result.imported_memories = r.rows_affected() as i64;
             println!("[Backup] Inserted {} memories (skip mode)", result.imported_memories);
+            result.debug_log.push(format!("inserted memories (skip): {}", result.imported_memories));
 
             let r = sqlx::query("INSERT OR IGNORE INTO conversations SELECT * FROM import_db.conversations")
                 .execute(&mut *conn).await
                 .map_err(|e| format!("INSERT OR IGNORE conversations failed: {}", e))?;
             result.imported_conversations = r.rows_affected() as i64;
+            result.debug_log.push(format!("inserted conversations (skip): {}", result.imported_conversations));
 
             sqlx::query("INSERT OR IGNORE INTO conversation_messages SELECT * FROM import_db.conversation_messages")
                 .execute(&mut *conn).await
@@ -626,14 +631,18 @@ pub async fn import_data(
         // 如果指定了目标 character_id，把所有导入的记忆和对话重映射过去
         if let Some(ref target_id) = options.target_character_id {
             println!("[Backup] Remapping character_id to '{}'", target_id);
-            sqlx::query("UPDATE memories SET character_id = ? WHERE character_id != ?")
+            result.debug_log.push(format!("remapping all character_ids to: {}", target_id));
+            let r = sqlx::query("UPDATE memories SET character_id = ? WHERE character_id != ?")
                 .bind(target_id)
                 .bind(target_id)
                 .execute(&mut *conn).await.ok();
+            result.debug_log.push(format!("memories remapped: {}", r.map(|r| r.rows_affected()).unwrap_or(0)));
             sqlx::query("UPDATE conversations SET character_id = ? WHERE character_id != ?")
                 .bind(target_id)
                 .bind(target_id)
                 .execute(&mut *conn).await.ok();
+        } else {
+            result.debug_log.push("no target_character_id — remap skipped".to_string());
         }
 
         drop(conn);

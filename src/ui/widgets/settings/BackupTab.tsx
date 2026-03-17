@@ -165,15 +165,7 @@ export const BackupTab: React.FC = () => {
         try {
             // Phase 1: 先恢复角色到 IndexedDB，拿到新 ID
             let targetCharacterId: string | undefined;
-            let previewResult: Awaited<ReturnType<typeof previewImport>> | null = null;
-            try {
-                previewResult = await previewImport(importFilePath);
-            } catch (_) {}
-
-            if (previewResult?.has_database) {
-                // 先做一次预提取 characters_json（通过临时 importData 调用不行，改为在后端 preview 时也返回）
-                // 实际上 characters_json 在 importData 返回，所以先调用一次只提取角色
-            }
+            let payload: any = null;
 
             // 先调用 importData 不带 target_character_id，拿到 characters_json
             const firstPass = await importData(importFilePath, {
@@ -182,9 +174,9 @@ export const BackupTab: React.FC = () => {
                 conflict_strategy: conflictStrategy,
             });
 
-            if (firstPass.characters_json) {
+            if (firstPass.characters_json && importDb) {
                 try {
-                    const payload = JSON.parse(firstPass.characters_json);
+                    payload = JSON.parse(firstPass.characters_json);
                     const chars: (Omit<CharacterProfile, 'avatarBlob'> & { avatarB64?: string })[] =
                         payload.characters ?? payload; // 兼容旧格式
 
@@ -195,23 +187,38 @@ export const BackupTab: React.FC = () => {
                     if (payload.responseLanguage != null) localStorage.setItem('kokoro_response_language', payload.responseLanguage);
                     if (payload.voiceInterrupt != null) localStorage.setItem('kokoro_voice_interrupt', payload.voiceInterrupt);
 
-                    // 清空现有角色，写入备份角色
-                    const existing = await characterDb.getAll();
-                    for (const c of existing) {
-                        if (c.id !== undefined) await characterDb.remove(c.id);
-                    }
+                    // 先写入所有备份角色，全部成功后再删旧角色，避免中途失败导致数据损坏
+                    const idMap = new Map<string, string>();
+                    const newIds: string[] = [];
                     for (const c of chars) {
                         let avatarBlob: Blob | undefined;
                         if (c.avatarB64) {
                             const bytes = Uint8Array.from(atob(c.avatarB64), ch => ch.charCodeAt(0));
                             avatarBlob = new Blob([bytes]);
                         }
-                        const { avatarB64, id, ...rest } = c;
+                        const { avatarB64, id: oldId, ...rest } = c;
                         const newId = await characterDb.add({ ...rest, avatarBlob });
-                        if (targetCharacterId === undefined) {
-                            targetCharacterId = String(newId);
+                        newIds.push(String(newId));
+                        if (oldId !== undefined) {
+                            idMap.set(String(oldId), String(newId));
                         }
                     }
+                    // 所有新角色写入成功，再清空旧角色
+                    const existing = await characterDb.getAll();
+                    for (const c of existing) {
+                        if (c.id !== undefined && !newIds.includes(String(c.id))) {
+                            await characterDb.remove(c.id);
+                        }
+                    }
+                    // 用备份里的 activeCharacterId 找到对应的新 ID
+                    const oldActiveId = payload.activeCharacterId;
+                    console.log('[Backup] oldActiveId:', oldActiveId, 'idMap:', [...idMap.entries()]);
+                    targetCharacterId = oldActiveId ? idMap.get(String(oldActiveId)) : undefined;
+                    // 找不到则回退到第一个角色
+                    if (!targetCharacterId && idMap.size > 0) {
+                        targetCharacterId = [...idMap.values()][0];
+                    }
+                    console.log('[Backup] targetCharacterId resolved to:', targetCharacterId);
                     if (targetCharacterId) {
                         localStorage.setItem('kokoro_active_character_id', targetCharacterId);
                     }
@@ -220,19 +227,38 @@ export const BackupTab: React.FC = () => {
                 }
             }
 
+            // 若仍未确定目标角色，回退到当前 localStorage 里的活跃角色
+            if (!targetCharacterId) {
+                targetCharacterId = localStorage.getItem('kokoro_active_character_id') ?? undefined;
+            }
+
             // Phase 2: 用正确的 target_character_id 导入数据库和配置
+            console.log('[Backup] Phase 2 importData options:', {
+                import_database: importDb,
+                import_configs: importConfigs,
+                conflict_strategy: conflictStrategy,
+                target_character_id: targetCharacterId,
+            });
             const result = await importData(importFilePath, {
                 import_database: importDb,
                 import_configs: importConfigs,
                 conflict_strategy: conflictStrategy,
                 target_character_id: targetCharacterId,
             });
+            console.log('[Backup] Phase 2 result:', result);
 
-            setImportDone(t('settings.backup.import_stats', {
-                memories: result.imported_memories,
-                conversations: result.imported_conversations,
-                configs: result.imported_configs,
-            }));
+            const debugInfo = [
+                `oldActiveId: ${payload?.activeCharacterId ?? 'n/a'}`,
+                `targetCharacterId: ${targetCharacterId ?? 'undefined'}`,
+                ...(result.debug_log ?? []),
+            ].join('\n');
+            setImportDone(
+                t('settings.backup.import_stats', {
+                    memories: result.imported_memories,
+                    conversations: result.imported_conversations,
+                    configs: result.imported_configs,
+                }) + '\n\n[debug]\n' + debugInfo
+            );
             setPreview(null);
             setTimeout(() => relaunch(), 1500);
         } catch (e: any) {
@@ -514,7 +540,7 @@ export const BackupTab: React.FC = () => {
                 {importDone && (
                     <div className="mt-3 flex items-start gap-2 text-xs text-[var(--color-accent)]">
                         <Check size={14} className="mt-0.5 shrink-0" />
-                        <span>{importDone}</span>
+                        <span className="whitespace-pre-wrap">{importDone}</span>
                     </div>
                 )}
                 {importError && (

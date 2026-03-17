@@ -146,12 +146,14 @@ pub fn run() {
         .setup(|app| {
             let app_handle = app.handle();
             tauri::async_runtime::block_on(async move {
-                let db_url = "sqlite://kokoro.db";
-                match crate::ai::context::AIOrchestrator::new(db_url).await {
+                let app_data_dir = dirs_next::data_dir()
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                    .join("com.chyin.kokoro");
+                let _ = std::fs::create_dir_all(&app_data_dir);
+                let db_path = app_data_dir.join("kokoro.db");
+                let db_url = format!("sqlite://{}", db_path.to_string_lossy().replace('\\', "/"));
+                match crate::ai::context::AIOrchestrator::new(&db_url).await {
                     Ok(orchestrator) => {
-                        let app_data_dir = dirs_next::data_dir()
-                            .unwrap_or_else(|| std::path::PathBuf::from("."))
-                            .join("com.chyin.kokoro");
 
                         // Restore proactive_enabled from disk
                         let proactive_path = app_data_dir.join("proactive_enabled.json");
