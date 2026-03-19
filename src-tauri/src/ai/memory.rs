@@ -19,7 +19,12 @@ const MEMORY_HALF_LIFE_DAYS: f64 = 30.0;
 const DEDUP_THRESHOLD: f32 = 0.95;
 
 /// Cosine similarity threshold for memory consolidation clustering.
-const CONSOLIDATION_THRESHOLD: f32 = 0.75;
+/// 0.85 requires strong topical overlap; 0.75 was too loose and merged unrelated topics.
+const CONSOLIDATION_THRESHOLD: f32 = 0.85;
+
+/// Maximum time gap (in seconds) between memories that can be consolidated together.
+/// Memories created more than N days apart are unlikely to be about the same event.
+const CONSOLIDATION_TIME_WINDOW_SECS: i64 = 7 * 24 * 3600; // 7 days
 
 /// Maximum number of memories in a single consolidation cluster.
 const MAX_CLUSTER_SIZE: usize = 5;
@@ -773,7 +778,8 @@ impl MemoryManager {
                     break;
                 }
                 let sim = cosine_similarity(&entries[i].2, &entries[j].2);
-                if sim > CONSOLIDATION_THRESHOLD {
+                let time_diff = (entries[i].5 - entries[j].5).abs();
+                if sim > CONSOLIDATION_THRESHOLD && time_diff <= CONSOLIDATION_TIME_WINDOW_SECS {
                     cluster.push(j);
                     used[j] = true;
                 }
