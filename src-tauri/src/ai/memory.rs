@@ -742,8 +742,8 @@ impl MemoryManager {
             return Ok(0);
         }
 
-        // Parse into (id, content, embedding, importance, tier)
-        let mut entries: Vec<(i64, String, Vec<f32>, f64, String)> = Vec::new();
+        // Parse into (id, content, embedding, importance, tier, created_at)
+        let mut entries: Vec<(i64, String, Vec<f32>, f64, String, i64)> = Vec::new();
         for row in &rows {
             let embedding_bytes: Vec<u8> = row.get("embedding");
             let embedding: Vec<f32> = bincode::deserialize(&embedding_bytes)?;
@@ -753,6 +753,7 @@ impl MemoryManager {
                 embedding,
                 row.get("importance"),
                 row.get("tier"),
+                row.get("created_at"),
             ));
         }
 
@@ -805,6 +806,12 @@ impl MemoryManager {
             } else {
                 "ephemeral"
             };
+            // 保留最早的 created_at，避免整合后记忆时间被重置
+            let earliest_created_at = cluster
+                .iter()
+                .map(|&idx| entries[idx].5)
+                .min()
+                .unwrap_or_else(|| chrono::Utc::now().timestamp());
 
             // Call LLM to merge facts
             let merged = match merge_facts_via_llm(&facts, &provider).await {
@@ -837,7 +844,7 @@ impl MemoryManager {
             )
             .bind(&merged)
             .bind(&embedding_bytes)
-            .bind(now)
+            .bind(earliest_created_at)
             .bind(now)
             .bind(max_importance)
             .bind(character_id)
