@@ -36,7 +36,7 @@ export function ThemeProvider({ children, initialTheme }: { children: ReactNode;
                 root.removeAttribute("style");
 
                 // 移除 Mod 加载的字体 <link> 标签
-                document.querySelectorAll('link[rel="stylesheet"][href*="mod.localhost"], link[rel="stylesheet"][href*="fonts.googleapis"]').forEach(el => el.remove());
+                document.querySelectorAll('link[rel="stylesheet"][href*="mod.localhost"], link[rel="stylesheet"][href*="mod://"], link[rel="stylesheet"][href*="fonts.googleapis"]').forEach(el => el.remove());
 
                 // 重置 body 背景
                 document.body.style.backgroundImage = "";

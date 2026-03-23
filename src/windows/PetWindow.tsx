@@ -9,6 +9,7 @@ import { usePetChat } from "../features/pet/usePetChat";
 import type { Live2DViewerHandle } from "../features/live2d/Live2DViewer";
 import type { EmotionState, ActionIntent } from "../features/live2d/Live2DController";
 import "../ui/i18n";
+import { live2dUrl } from "../lib/utils";
 
 interface PetConfig {
     enabled: boolean;
@@ -25,7 +26,7 @@ export default function PetWindow() {
     // Read model from localStorage and sync when main window changes it
     const getModelUrl = () => {
         const saved = localStorage.getItem("kokoro_custom_model_path");
-        if (saved) return `http://live2d.localhost/${saved}`;
+        if (saved) return live2dUrl(saved);
         return "https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/haru/haru_greeter_t03.model3.json";
     };
     const [modelUrl, setModelUrl] = useState(getModelUrl);

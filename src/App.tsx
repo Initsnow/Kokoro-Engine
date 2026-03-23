@@ -12,6 +12,7 @@ import SettingsPanel from "./ui/widgets/SettingsPanel";
 import BackgroundLayer from "./ui/widgets/BackgroundLayer";
 import { useBackgroundSlideshow } from "./ui/hooks/useBackgroundSlideshow";
 import type { Live2DDisplayMode } from "./features/live2d/Live2DViewer";
+import { live2dUrl } from "./lib/utils";
 
 // Register components synchronously before first render
 registerCoreComponents();
@@ -232,7 +233,7 @@ function App() {
 
   const modelUrl = useMemo(() => {
     if (customModelPath) {
-      return `http://live2d.localhost/${customModelPath}`;
+      return live2dUrl(customModelPath);
     }
     return "https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/haru/haru_greeter_t03.model3.json";
   }, [customModelPath]);

@@ -5,6 +5,7 @@ import { RefreshCw, Play, Eye, EyeOff, Package, AlertCircle, Import, RotateCcw }
 import { listMods, loadMod, installMod, unloadMod, type ModManifest } from "../../lib/kokoro-bridge";
 import { open } from "@tauri-apps/plugin-dialog";
 import { IframeSandbox } from "./IframeSandbox";
+import { modUrl } from "../../lib/utils";
 import { useTranslation, Trans } from "react-i18next";
 
 export function ModList() {
@@ -272,7 +273,7 @@ export function ModList() {
                                     >
                                         <IframeSandbox
                                             id={mod.id}
-                                            src={`mod://${mod.id}/${mod.ui_entry}`}
+                                            src={modUrl(`mod://${mod.id}/${mod.ui_entry}`)}
                                             permissions={mod.permissions ?? []}
                                         />
                                     </motion.div>
