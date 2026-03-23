@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-const isWindows = () => navigator.userAgent.includes("Windows");
+const isWindows = () => typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
 
 /**
  * Build a live2d:// URL that works on all platforms.
