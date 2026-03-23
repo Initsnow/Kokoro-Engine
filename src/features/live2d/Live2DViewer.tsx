@@ -8,18 +8,16 @@
  * - Expression and motion control via ref
  */
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
-import * as PIXI from "pixi.js";
 import { Live2DModel } from "pixi-live2d-display/cubism4";
 import { Live2DController, type EmotionState, type ActionIntent, type IdleBehavior } from "./Live2DController";
 import { drawableHitTest, estimateRegionByY, REGION_DESCRIPTIONS } from "./DrawableHitTest";
 import { onChatExpression, onChatAction } from "../../lib/kokoro-bridge";
 import { listen } from "@tauri-apps/api/event";
 import { interactionService, type GestureEvent } from "../../core/services/interaction-service";
+import * as PIXI from "pixi.js";
 
-// Register PIXI to the global window for pixi-live2d-display internals
-const win = window as Window & { PIXI?: typeof PIXI };
-win.PIXI = PIXI;
 PIXI.utils.skipHello();
+Live2DModel.registerTicker(PIXI.Ticker);
 
 // ── Types ──────────────────────────────────────────
 
@@ -300,7 +298,7 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                     }
 
                     // Ensure model is interactive
-                    model.interactive = true;
+                    (model as any).interactive = true;
 
                     // ── Pointer-based gesture detection ──
                     // Replaces model.on("hit") with tap / long_press detection
@@ -387,7 +385,7 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                     app.stage.addChild(model as unknown as PIXI.DisplayObject);
 
                     // Add update loop
-                    app.ticker.add((delta) => {
+                    app.ticker.add((delta: number) => {
                         const ctrl = getActiveController();
                         if (ctrl) {
                             // Delta in Pixi is frame-dependent (1 = 60fps). 
