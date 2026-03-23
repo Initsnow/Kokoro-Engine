@@ -54,6 +54,8 @@ pub fn run() {
             commands::context::get_jailbreak_prompt,
             commands::context::set_proactive_enabled,
             commands::context::get_proactive_enabled,
+            commands::context::set_memory_enabled,
+            commands::context::get_memory_enabled,
             commands::context::clear_history,
             commands::context::delete_last_messages,
             commands::context::end_session,
@@ -177,6 +179,19 @@ pub fn run() {
                             }
                         }
 
+                        // Restore memory_enabled from disk
+                        let memory_cfg_path = app_data_dir.join("memory_system_config.json");
+                        let memory_cfg: serde_json::Value = crate::config::load_json_config(
+                            &memory_cfg_path,
+                            "MEMORY",
+                        );
+                        let memory_enabled = memory_cfg
+                            .get("enabled")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true);
+                        orchestrator.set_memory_enabled(memory_enabled).await;
+                        println!("[AI] Restored memory_enabled={}", memory_enabled);
+
                         // Restore jailbreak_prompt from disk
                         let jailbreak_path = app_data_dir.join("jailbreak_prompt.json");
                         if let Ok(content) = std::fs::read_to_string(&jailbreak_path) {
@@ -249,7 +264,9 @@ pub fn run() {
                         tauri::async_runtime::spawn(async move {
                             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                             if let Some(orch) = emotion_app.try_state::<crate::ai::context::AIOrchestrator>() {
-                                if let Err(e) = orch.load_emotion_state().await {
+                                if !orch.is_memory_enabled() {
+                                    println!("[AI] Skipping emotion state restore because memory is disabled");
+                                } else if let Err(e) = orch.load_emotion_state().await {
                                     println!("[AI] Failed to restore emotion state: {}", e);
                                 }
                             }

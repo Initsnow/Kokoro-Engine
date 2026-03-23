@@ -22,6 +22,7 @@ const CONFIG_FILES: &[&str] = &[
     "telegram_config.json",
     "jailbreak_prompt.json",
     "proactive_enabled.json",
+    "memory_system_config.json",
     "emotion_state.json",
     "context_settings.json",
     "current_conversation_id.json",

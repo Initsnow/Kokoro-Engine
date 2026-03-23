@@ -112,6 +112,8 @@ pub struct ActionRegistry {
     mcp_tool_names: std::collections::HashSet<String>,
 }
 
+const MEMORY_ACTIONS: &[&str] = &["search_memory", "store_memory", "forget_memory"];
+
 impl Default for ActionRegistry {
     fn default() -> Self {
         Self::new()
@@ -183,9 +185,25 @@ impl ActionRegistry {
             .collect()
     }
 
+    pub fn list_actions_for_prompt(&self, memory_enabled: bool) -> Vec<ActionInfo> {
+        self.handlers
+            .values()
+            .filter(|h| memory_enabled || !MEMORY_ACTIONS.contains(&h.name()))
+            .map(|h| ActionInfo {
+                name: h.name().to_string(),
+                description: h.description().to_string(),
+                parameters: h.parameters(),
+            })
+            .collect()
+    }
+
     /// Generate the prompt instruction block describing available tools.
     pub fn generate_tool_prompt(&self) -> String {
-        let actions = self.list_actions();
+        self.generate_tool_prompt_for_prompt(true)
+    }
+
+    pub fn generate_tool_prompt_for_prompt(&self, memory_enabled: bool) -> String {
+        let actions = self.list_actions_for_prompt(memory_enabled);
         if actions.is_empty() {
             return String::new();
         }

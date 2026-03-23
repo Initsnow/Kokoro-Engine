@@ -95,7 +95,7 @@ pub async fn heartbeat_loop(app_handle: AppHandle) {
             emotion.decay_toward_default();
 
             // Snapshot — at most once per 60 seconds
-            if last_snapshot_ts.elapsed().as_secs() >= 60 {
+            if orchestrator.is_memory_enabled() && last_snapshot_ts.elapsed().as_secs() >= 60 {
                 last_snapshot_ts = std::time::Instant::now();
                 let snap = emotion.snapshot();
                 let char_id = orchestrator.get_character_id().await;
@@ -133,7 +133,7 @@ pub async fn heartbeat_loop(app_handle: AppHandle) {
         crate::commands::auto_backup::check_and_run(&app_handle).await;
 
         // 5. Memory Decay Pruning (once per hour)
-        if last_prune_ts.elapsed().as_secs() >= 3600 {
+        if orchestrator.is_memory_enabled() && last_prune_ts.elapsed().as_secs() >= 3600 {
             last_prune_ts = std::time::Instant::now();
             let memory_mgr = orchestrator.memory_manager.clone();
             let char_id = orchestrator.get_character_id().await;

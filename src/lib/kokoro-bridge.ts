@@ -131,6 +131,14 @@ export async function clearHistory(): Promise<void> {
     return invoke("clear_history");
 }
 
+export async function setMemoryEnabled(enabled: boolean): Promise<void> {
+    return invoke("set_memory_enabled", { enabled });
+}
+
+export async function getMemoryEnabled(): Promise<boolean> {
+    return invoke<boolean>("get_memory_enabled");
+}
+
 // ── Context Settings ───────────────────────────────
 
 export interface ContextSettings {
