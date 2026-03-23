@@ -24,12 +24,14 @@
         src = lib.cleanSource ./.;
 
         runtimeLibraries = with pkgs; [
+          alsa-lib
           atk
           cairo
           gdk-pixbuf
           glib
           glib-networking
           gsettings-desktop-schemas
+          gst_all_1.gst-plugins-bad
           gst_all_1.gst-plugins-base
           gst_all_1.gst-plugins-good
           gst_all_1.gstreamer
@@ -79,6 +81,7 @@
               wrapProgram "$bin" \
                 --set GIO_MODULE_DIR ${pkgs.glib-networking}/lib/gio/modules \
                 --prefix GIO_EXTRA_MODULES : ${pkgs.glib-networking}/lib/gio/modules \
+                --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : ${pkgs.gst_all_1.gst-plugins-bad}/lib/gstreamer-1.0 \
                 --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : ${pkgs.gst_all_1.gstreamer}/lib/gstreamer-1.0 \
                 --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : ${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0 \
                 --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : ${pkgs.gst_all_1.gst-plugins-good}/lib/gstreamer-1.0 \
@@ -102,6 +105,7 @@
         apps.default = {
           type = "app";
           program = "${app}/bin/${app.meta.mainProgram}";
+          meta = app.meta;
         };
 
         devShells.default = pkgs.mkShell {
@@ -125,7 +129,7 @@
             export XDG_DATA_DIRS="$GSETTINGS_SCHEMAS_PATH''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
             export GIO_MODULE_DIR="${pkgs.glib-networking}/lib/gio/modules"
             export GIO_EXTRA_MODULES="${pkgs.glib-networking}/lib/gio/modules''${GIO_EXTRA_MODULES:+:$GIO_EXTRA_MODULES}"
-            export GST_PLUGIN_SYSTEM_PATH_1_0="${pkgs.gst_all_1.gstreamer}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-good}/lib/gstreamer-1.0''${GST_PLUGIN_SYSTEM_PATH_1_0:+:$GST_PLUGIN_SYSTEM_PATH_1_0}"
+            export GST_PLUGIN_SYSTEM_PATH_1_0="${pkgs.gst_all_1.gst-plugins-bad}/lib/gstreamer-1.0:${pkgs.gst_all_1.gstreamer}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-good}/lib/gstreamer-1.0''${GST_PLUGIN_SYSTEM_PATH_1_0:+:$GST_PLUGIN_SYSTEM_PATH_1_0}"
             export GST_PLUGIN_SCANNER="${pkgs.gst_all_1.gstreamer.out}/libexec/gstreamer-1.0/gst-plugin-scanner"
             export ORT_LIB_LOCATION="${pkgs.onnxruntime}/lib"
             export ORT_PREFER_DYNAMIC_LINK=1
