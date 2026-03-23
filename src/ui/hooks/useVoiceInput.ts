@@ -1,10 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { isTauriEnvironment } from "../../utils/env";
 
 const SNAPSHOT_INTERVAL = 2000; // 2s: ultra-fast provisional feedback
 const FLUSH_WINDOW = 25000;      // 25s: force commit
 const OVERLAP_SECONDS = 1.0;
 const SAMPLE_RATE = 16000;
+type CaptureTransport = "web" | "native";
 
 export enum VoiceState {
     Idle = "idle",
@@ -41,6 +44,8 @@ export function useVoiceInput(
     const mediaStream = useRef<MediaStream | null>(null);
     const processor = useRef<ScriptProcessorNode | null>(null);
     const sourceNode = useRef<MediaStreamAudioSourceNode | null>(null);
+    const nativeVolumeUnlisten = useRef<UnlistenFn | null>(null);
+    const captureTransport = useRef<CaptureTransport | null>(null);
 
     const snapshotTimer = useRef<number | null>(null);
     const lastFlushTime = useRef<number>(0);
@@ -94,6 +99,42 @@ export function useVoiceInput(
         invoke("process_audio_chunk", { chunk: Array.from(inputData) })
             .catch(err => console.warn("Audio drop:", err));
     }, []);
+
+    const cleanupWebCapture = useCallback(async () => {
+        if (mediaStream.current) {
+            mediaStream.current.getTracks().forEach(t => t.stop());
+        }
+        if (sourceNode.current) sourceNode.current.disconnect();
+        if (processor.current) processor.current.disconnect();
+        if (audioContext.current) {
+            await audioContext.current.close();
+        }
+
+        mediaStream.current = null;
+        sourceNode.current = null;
+        processor.current = null;
+        audioContext.current = null;
+    }, []);
+
+    const cleanupNativeCapture = useCallback(async () => {
+        if (nativeVolumeUnlisten.current) {
+            nativeVolumeUnlisten.current();
+            nativeVolumeUnlisten.current = null;
+        }
+    }, []);
+
+    const stopCapture = useCallback(async () => {
+        if (captureTransport.current === "native") {
+            try {
+                await invoke("stop_native_mic");
+            } finally {
+                await cleanupNativeCapture();
+            }
+            return;
+        }
+
+        await cleanupWebCapture();
+    }, [cleanupNativeCapture, cleanupWebCapture]);
 
     // ── Streaming Logic ───────────────────────────────────────────────
 
@@ -157,35 +198,47 @@ export function useVoiceInput(
 
     const start = useCallback(async (opts?: { autoStopOnSilence?: boolean }) => {
         if (state !== VoiceState.Idle) return;
-        autoStopRef.current = opts?.autoStopOnSilence ?? false;
+        const useNativeCapture = isTauriEnvironment();
+        autoStopRef.current = useNativeCapture ? false : (opts?.autoStopOnSilence ?? false);
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    channelCount: 1,
-                    sampleRate: SAMPLE_RATE,
-                    echoCancellation: true,
-                    noiseSuppression: true
-                }
-            });
+            await invoke("discard_audio_stream");
 
-            mediaStream.current = stream;
-            const ctx = new window.AudioContext({ sampleRate: SAMPLE_RATE });
-            audioContext.current = ctx;
+            if (useNativeCapture) {
+                captureTransport.current = "native";
+                nativeVolumeUnlisten.current = await listen<number>("stt:mic-volume", (event) => {
+                    setVolume(typeof event.payload === "number" ? event.payload : 0);
+                });
+                await invoke("start_native_mic");
+            } else {
+                captureTransport.current = "web";
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        sampleRate: SAMPLE_RATE,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
 
-            const src = ctx.createMediaStreamSource(stream);
-            sourceNode.current = src;
+                mediaStream.current = stream;
+                const ctx = new window.AudioContext({ sampleRate: SAMPLE_RATE });
+                audioContext.current = ctx;
 
-            // Use ScriptProcessor (buffer 4096 ~= 256ms)
-            const proc = ctx.createScriptProcessor(4096, 1, 1);
-            proc.onaudioprocess = (e) => {
-                if (!isRunning.current) return;
-                processAudioChunk(e.inputBuffer.getChannelData(0));
-            };
+                const src = ctx.createMediaStreamSource(stream);
+                sourceNode.current = src;
 
-            src.connect(proc);
-            proc.connect(ctx.destination);
-            processor.current = proc;
+                // Use ScriptProcessor (buffer 4096 ~= 256ms)
+                const proc = ctx.createScriptProcessor(4096, 1, 1);
+                proc.onaudioprocess = (e) => {
+                    if (!isRunning.current) return;
+                    processAudioChunk(e.inputBuffer.getChannelData(0));
+                };
+
+                src.connect(proc);
+                proc.connect(ctx.destination);
+                processor.current = proc;
+            }
 
             // Reset State
             isRunning.current = true;
@@ -203,9 +256,11 @@ export function useVoiceInput(
 
         } catch (err) {
             console.error("Failed to start mic:", err);
+            await stopCapture().catch(() => undefined);
+            captureTransport.current = null;
             setState(VoiceState.Error);
         }
-    }, [state, performSnapshot, processAudioChunk]);
+    }, [state, performSnapshot, processAudioChunk, stopCapture]);
 
     const stop = useCallback(async () => {
         if (!isRunning.current) return; // Guard against double-stop
@@ -215,6 +270,12 @@ export function useVoiceInput(
         if (snapshotTimer.current) {
             clearInterval(snapshotTimer.current);
             snapshotTimer.current = null;
+        }
+
+        try {
+            await stopCapture();
+        } catch (e) {
+            console.error("Failed to stop capture transport:", e);
         }
 
         // Finalize: get last bit
@@ -237,25 +298,14 @@ export function useVoiceInput(
             console.error("Final transcription failed:", e);
         }
 
-        // Cleanup Audio
-        if (mediaStream.current) {
-            mediaStream.current.getTracks().forEach(t => t.stop());
-        }
-        if (sourceNode.current) sourceNode.current.disconnect();
-        if (processor.current) processor.current.disconnect();
-        if (audioContext.current) audioContext.current.close();
-
-        mediaStream.current = null;
-        sourceNode.current = null;
-        processor.current = null;
-        audioContext.current = null;
+        captureTransport.current = null;
 
         setState(VoiceState.Idle);
         setVolume(0);
         setPartialText("");
         segmentsRef.current = [];
 
-    }, [onFinalTranscription]);
+    }, [onFinalTranscription, stopCapture]);
 
     // Keep stopRef in sync so VAD auto-stop can call the latest stop()
     useEffect(() => {
@@ -267,9 +317,11 @@ export function useVoiceInput(
         return () => {
             if (isRunning.current) {
                 stopRef.current?.();
+            } else {
+                cleanupNativeCapture();
             }
         };
-    }, []);
+    }, [cleanupNativeCapture]);
 
     return {
         state,

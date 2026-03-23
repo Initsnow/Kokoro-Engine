@@ -51,6 +51,8 @@ sherpa-onnx = "1"
 hound = "3"
 bzip2 = "0.4"
 tar = "0.4"
+cpal = "0.15"
+rubato = "0.14"
 
 [features]
 stress = []

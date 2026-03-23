@@ -1,12 +1,10 @@
 use crate::stt::config::save_config;
 use crate::stt::{
-    AudioChunk, AudioSource, SenseVoiceLocalModelStatus,
-    SttConfig, SttService,
+    AudioChunk, AudioSource, NativeMicState, SenseVoiceLocalModelStatus, SttConfig, SttService,
 };
 use std::sync::Arc;
-use tauri::command;
 use tauri::State;
-
+use tauri::{command, AppHandle};
 
 /// Transcribe audio bytes to text using the active STT provider.
 #[command]
@@ -99,6 +97,22 @@ pub async fn transcribe_wake_word_audio(
         .map_err(|e| e.to_string())?;
 
     Ok(result.text)
+}
+
+#[command]
+pub async fn start_native_mic(
+    app: AppHandle,
+    mic_state: State<'_, NativeMicState>,
+) -> Result<(), String> {
+    crate::stt::mic::start_native_mic(&app, mic_state.inner())
+}
+
+#[command]
+pub async fn stop_native_mic(
+    app: AppHandle,
+    mic_state: State<'_, NativeMicState>,
+) -> Result<(), String> {
+    crate::stt::mic::stop_native_mic(&app, mic_state.inner())
 }
 
 /// Return the install status of the recommended SenseVoice local model.
