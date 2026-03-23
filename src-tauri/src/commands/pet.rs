@@ -162,10 +162,10 @@ pub async fn show_bubble_window(app: tauri::AppHandle, text: String) -> Result<(
             .resizable(false)
             .shadow(false)
             .build()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e: tauri::Error| e.to_string())?;
 
         // 确保透明窗口能接收鼠标滚轮等事件
-        win.set_ignore_cursor_events(false).map_err(|e| e.to_string())?;
+        win.set_ignore_cursor_events(false).map_err(|e: tauri::Error| e.to_string())?;
 
         // Wait for frontend to mount before sending text
         let win_clone = win.clone();

@@ -14,8 +14,12 @@ pub fn capture_screen() -> Result<Vec<u8>, String> {
         .capture()
         .map_err(|e| format!("Screen capture failed: {}", e))?;
 
+    // Rebuild from raw bytes to avoid image crate version conflicts
+    let rgba_img = image::RgbaImage::from_raw(img.width(), img.height(), img.rgba().to_vec())
+        .ok_or_else(|| "Failed to construct image from raw bytes".to_string())?;
+
     // Convert RGBA → RGB (JPEG doesn't support alpha channel)
-    let rgb_img = image::DynamicImage::ImageRgba8(img).to_rgb8();
+    let rgb_img = image::DynamicImage::ImageRgba8(rgba_img).to_rgb8();
 
     // Encode as JPEG (smaller than PNG, faster to encode)
     let mut buf = std::io::Cursor::new(Vec::new());
