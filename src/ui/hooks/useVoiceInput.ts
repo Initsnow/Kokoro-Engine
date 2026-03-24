@@ -89,7 +89,6 @@ export function useVoiceInput(
         }
 
         if (now - silenceSinceMsRef.current >= SILENCE_MS_TO_STOP) {
-            console.log("[STT] Auto-stop: silence detected after speech");
             speechDetected.current = false;
             silenceSinceMsRef.current = null;
             setTimeout(() => stopRef.current?.(), 0);
@@ -191,7 +190,6 @@ export function useVoiceInput(
         try {
             nativeAutoStopUnlisten.current = await listen("stt:mic-auto-stop", () => {
                 if (!isRunning.current || !autoStopRef.current) return;
-                console.log("[STT][native] received stt:mic-auto-stop");
                 setTimeout(() => stopRef.current?.(), 0);
             });
             nativeVolumeUnlisten.current = await listen<NativeMicVolumeEvent | number>("stt:mic-volume", (event) => {
@@ -204,11 +202,7 @@ export function useVoiceInput(
                             : 0;
                 setVolume(nextVolume);
             });
-            console.log("[STT][native] invoking start_native_mic", {
-                autoStopOnSilence: autoStopRef.current,
-            });
             await invoke("start_native_mic", { autoStopOnSilence: autoStopRef.current });
-            console.log("[STT][native] start_native_mic resolved");
         } catch (error) {
             await cleanupNativeCapture();
             captureTransport.current = null;
@@ -272,7 +266,6 @@ export function useVoiceInput(
                 // We just tell backend to discard old raw audio to save RAM.
                 await invoke("prune_audio_buffer", { keepSeconds: OVERLAP_SECONDS });
                 lastFlushTime.current = now;
-                console.log("[STT] Pruned backend buffer (kept overlap).");
             }
 
         } catch (e) {
@@ -292,7 +285,6 @@ export function useVoiceInput(
 
             if (isTauriEnvironment()) {
                 try {
-                    console.log("[STT] starting native capture", { shouldAutoStop });
                     await startNativeCapture();
                 } catch (nativeError) {
                     console.warn("[STT] Native mic start failed, falling back to WebRTC:", nativeError);
@@ -313,8 +305,6 @@ export function useVoiceInput(
 
             // Start Snapshot Loop
             snapshotTimer.current = window.setInterval(performSnapshot, SNAPSHOT_INTERVAL);
-
-            console.log("[STT] Started listening (Streaming Mode)");
 
         } catch (err) {
             console.error("Failed to start mic:", err);

@@ -173,22 +173,9 @@ impl NativeFrameProcessor {
             vad.accept_waveform(&frame.samples);
             if !self.vad_detected_logged && vad.detected() {
                 self.vad_detected_logged = true;
-                eprintln!(
-                    "[STT][native-vad] speech detected after {} frames",
-                    self.vad_frame_counter
-                );
             }
             if !self.auto_stop_emitted && !vad.is_empty() {
                 self.auto_stop_emitted = true;
-                if let Some(segment) = vad.front() {
-                    eprintln!(
-                        "[STT][native-vad] auto-stop segment ready: start={} samples={}",
-                        segment.start(),
-                        segment.n()
-                    );
-                } else {
-                    eprintln!("[STT][native-vad] auto-stop segment ready");
-                }
                 let _ = self.app.emit("stt:mic-auto-stop", ());
             }
         }
@@ -218,10 +205,6 @@ pub fn start_native_mic_with_options(
     mic_state: &NativeMicState,
     auto_stop_on_silence: bool,
 ) -> Result<(), String> {
-    eprintln!(
-        "[STT][native] start_native_mic_with_options auto_stop_on_silence={}",
-        auto_stop_on_silence
-    );
     let tx = mic_state.ensure_worker(app)?;
     let (response_tx, response_rx) = mpsc::sync_channel(1);
     tx.send(WorkerCommand::Start {
@@ -235,7 +218,6 @@ pub fn start_native_mic_with_options(
 }
 
 pub fn stop_native_mic(app: &AppHandle, mic_state: &NativeMicState) -> Result<(), String> {
-    eprintln!("[STT][native] stop_native_mic");
     let tx = mic_state.ensure_worker(app)?;
     let (response_tx, response_rx) = mpsc::sync_channel(1);
     tx.send(WorkerCommand::Stop {
@@ -257,12 +239,7 @@ fn spawn_mic_worker(rx: Receiver<WorkerCommand>, app: AppHandle) {
                     auto_stop_on_silence,
                     response,
                 } => {
-                    eprintln!(
-                        "[STT][native-worker] start command auto_stop_on_silence={}",
-                        auto_stop_on_silence
-                    );
                     let result = if stream.is_some() {
-                        eprintln!("[STT][native-worker] stream already running");
                         Ok(())
                     } else {
                         match build_native_input_stream(&app, auto_stop_on_silence) {
@@ -280,7 +257,6 @@ fn spawn_mic_worker(rx: Receiver<WorkerCommand>, app: AppHandle) {
                     let _ = response.send(result);
                 }
                 WorkerCommand::Stop { response } => {
-                    eprintln!("[STT][native-worker] stop command");
                     stream.take();
                     let _ = app.emit(
                         "stt:mic-volume",
@@ -473,10 +449,6 @@ fn spawn_frame_processor(
 
 pub(crate) fn create_voice_activity_detector() -> Result<VoiceActivityDetector, String> {
     let model_path = ensure_silero_vad_model()?;
-    eprintln!(
-        "[STT][native-vad] using model path {}",
-        model_path.to_string_lossy()
-    );
     let config = VadModelConfig {
         silero_vad: SileroVadModelConfig {
             model: Some(model_path.to_string_lossy().into_owned()),
@@ -495,7 +467,6 @@ pub(crate) fn create_voice_activity_detector() -> Result<VoiceActivityDetector, 
 
     let detector = VoiceActivityDetector::create(&config, 30.0)
         .ok_or_else(|| "Failed to create sherpa-onnx voice activity detector".to_string())?;
-    eprintln!("[STT][native-vad] detector created");
     Ok(detector)
 }
 
@@ -508,14 +479,9 @@ fn ensure_silero_vad_model() -> Result<std::path::PathBuf, String> {
     fs::create_dir_all(&app_data_dir).map_err(|err| err.to_string())?;
     let model_path = app_data_dir.join(SILERO_VAD_MODEL_NAME);
     if model_path.is_file() {
-        eprintln!("[STT][native-vad] found existing silero vad model");
         return Ok(model_path);
     }
 
-    eprintln!(
-        "[STT][native-vad] downloading silero vad model from {}",
-        SILERO_VAD_MODEL_URL
-    );
     let bytes = tauri::async_runtime::block_on(async {
         reqwest::get(SILERO_VAD_MODEL_URL)
             .await
@@ -526,7 +492,6 @@ fn ensure_silero_vad_model() -> Result<std::path::PathBuf, String> {
     })?;
 
     fs::write(&model_path, &bytes).map_err(|err| err.to_string())?;
-    eprintln!("[STT][native-vad] downloaded silero vad model");
     Ok(model_path)
 }
 

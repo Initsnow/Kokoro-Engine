@@ -128,10 +128,6 @@ impl WakeWordFrameProcessor {
 
         if !self.vad_logged && self.detector.detected() {
             self.vad_logged = true;
-            eprintln!(
-                "[WakeWord][native] speech detected after {} frames",
-                self.frame_counter
-            );
         }
 
         while let Some(segment) = self.detector.front() {
@@ -159,7 +155,6 @@ impl WakeWordFrameProcessor {
 
 struct WakeWordTranscriber {
     app: AppHandle,
-    wake_word: String,
     wake_word_normalized: String,
     last_detection_at: Option<Instant>,
 }
@@ -169,7 +164,6 @@ impl WakeWordTranscriber {
         Self {
             app,
             wake_word_normalized: normalize_text(&wake_word),
-            wake_word,
             last_detection_at: None,
         }
     }
@@ -198,10 +192,6 @@ impl WakeWordTranscriber {
         let normalized = normalize_text(&result.text);
         if normalized.contains(&self.wake_word_normalized) {
             self.last_detection_at = Some(Instant::now());
-            eprintln!(
-                "[WakeWord][native] matched wake word '{}' from '{}'",
-                self.wake_word, result.text
-            );
             let _ = self.app.emit("stt:wake-word-detected", result.text);
         }
 

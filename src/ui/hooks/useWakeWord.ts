@@ -236,7 +236,6 @@ export function useWakeWord({ wakeWord, enabled, onWakeWordDetected }: WakeWordO
             }
 
             isRunningRef.current = true;
-            console.log("[WakeWord] Listening for:", wakeWordRef.current);
         } catch (error) {
             transportRef.current = null;
             console.error("[WakeWord] Failed to start microphone:", error);
