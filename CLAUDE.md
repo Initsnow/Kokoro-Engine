@@ -179,6 +179,123 @@ gh release create vX.Y.Z \
 
 - `v0.1.0-beta`：首个公开测试版，核心功能完整，部分商业 API 未经完整测试
 
+## CI/CD 工作流
+
+### 自动化构建流程
+
+Kokoro Engine 使用 GitHub Actions 实现跨平台自动化构建和发布。
+
+#### 工作流文件
+
+| 文件 | 触发条件 | 功能 |
+|------|--------|------|
+| `ci.yml` | 每次 push 到 main/develop，PR | 前端测试、后端测试、三平台编译检查 |
+| `build-windows.yml` | push 到 main、标签 v*、手动触发 | Windows NSIS 安装包构建 |
+| `build-macos.yml` | push 到 main、标签 v*、手动触发 | macOS DMG 应用构建 |
+| `build-linux.yml` | push 到 main、标签 v*、手动触发 | Linux AppImage + DEB 构建 |
+
+#### 发布流程（自动化）
+
+1. **本地提交** - 推送代码到 main 分支
+2. **CI 检查** - `ci.yml` 运行所有测试和编译检查
+3. **创建标签** - 运行 `/tauri-release` 创建 Git 标签 `vX.Y.Z`
+4. **自动构建** - 三个平台的构建工作流并行运行
+5. **自动发布** - 构建完成后自动上传到 GitHub Release
+
+#### 手动触发构建
+
+如果需要手动构建（不创建 Release），可以在 GitHub Actions 页面点击 "Run workflow"：
+
+```
+Actions → Build Windows/macOS/Linux → Run workflow
+```
+
+#### 构建产物
+
+| 平台 | 产物 | 位置 |
+|------|------|------|
+| Windows | NSIS 安装包 (.exe) | `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/` |
+| macOS | DMG 镜像 (.dmg) | `src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/` |
+| Linux | AppImage (.AppImage) + DEB (.deb) | `src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/` |
+
+#### 工作流状态
+
+查看构建状态：https://github.com/chyin/kokoro-engine/actions
+
+## 代码质量要求
+
+### 编译检查（提交前必须通过）
+
+**前端**：
+```bash
+npx tsc --noEmit
+npm run test
+```
+
+**后端**：
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo clippy -- -D warnings
+cd src-tauri && cargo fmt -- --check
+cd src-tauri && cargo test
+```
+
+### 平台兼容性（Windows 开发必读）
+
+本项目支持 Windows、macOS、Linux。**在 Windows 上开发时特别注意**：
+
+#### ❌ 禁止的做法
+```rust
+// 硬编码 Windows 路径
+let path = "C:\\Users\\...";
+let path = "D:\\Program\\...";
+
+// 硬编码 Unix 路径
+let path = "/Users/...";
+let path = "/home/...";
+
+// 使用 Windows 特定的 API 而不检查平台
+use std::os::windows::...;
+```
+
+#### ✅ 正确的做法
+```rust
+// 使用 Tauri 的跨平台 API
+use tauri::api::path::{app_dir, config_dir};
+
+// 使用条件编译
+#[cfg(target_os = "windows")]
+fn windows_specific() { ... }
+
+#[cfg(target_os = "macos")]
+fn macos_specific() { ... }
+
+#[cfg(target_os = "linux")]
+fn linux_specific() { ... }
+
+// 使用 std::path::PathBuf 处理路径
+use std::path::PathBuf;
+let path = PathBuf::from("relative/path");
+```
+
+#### 常见陷阱
+- **路径分隔符**：使用 `/` 或 `PathBuf`，不要硬编码 `\\`
+- **行尾符**：Rust 自动处理，不要手动指定 `\r\n`
+- **环境变量**：使用 `std::env::var()`，不要假设 `HOME` 或 `USERPROFILE` 存在
+- **文件权限**：Windows 没有 Unix 权限模型，不要使用 `chmod`
+
+### 发布前检查清单
+
+在运行 `/tauri-release` 前，自动验证：
+- [ ] 所有测试通过：`npm run test && cd src-tauri && cargo test`
+- [ ] 版本号一致：package.json、src-tauri/tauri.conf.json、src-tauri/Cargo.toml
+- [ ] 代码格式正确：`cd src-tauri && cargo fmt -- --check`
+- [ ] 没有 clippy 警告：`cd src-tauri && cargo clippy -- -D warnings`
+- [ ] 没有未提交的更改：`git status` 干净
+- [ ] 本地构建成功（至少在 Windows 上）
+- [ ] Git 标签不存在：`git tag | grep vX.Y.Z` 无结果
+- [ ] 远程分支已同步：`git fetch && git status` 显示 "up to date"
+
 ## 文档
 
 - `docs/architecture.md` — 系统架构设计

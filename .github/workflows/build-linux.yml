@@ -1,0 +1,91 @@
+name: Build Linux
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    name: Build Linux App
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            pkg-config
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Linux app (x86_64)
+        run: npm run tauri build -- --target x86_64-unknown-linux-gnu --bundles appimage,deb
+
+      - name: List bundle output
+        run: find src-tauri/target/x86_64-unknown-linux-gnu/release/bundle -type f | sort
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kokoro-Engine-linux-appimage
+          path: src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          retention-days: 30
+
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kokoro-Engine-linux-deb
+          path: src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+          retention-days: 30
+
+      - name: Rename files for release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          cd src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage
+          for file in *.AppImage; do
+            mv "$file" "${file%.AppImage}-linux.AppImage"
+          done
+          cd ../deb
+          for file in *.deb; do
+            mv "$file" "${file%.deb}-linux.deb"
+          done
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*-linux.AppImage
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*-linux.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
