@@ -24,7 +24,10 @@ jobs:
             libsoup-3.0-dev \
             libssl-dev \
             libwebkit2gtk-4.1-dev \
-            pkg-config
+            pkg-config \
+            libfuse2 \
+            file \
+            appstream
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
