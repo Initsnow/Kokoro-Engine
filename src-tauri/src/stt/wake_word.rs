@@ -8,6 +8,7 @@ use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::mpsc as tokio_mpsc;
 
 const DETECTION_COOLDOWN: Duration = Duration::from_secs(2);
 const RESAMPLER_CHUNK_SIZE: usize = 256;
@@ -105,14 +106,14 @@ impl NativeInputProcessor {
 }
 
 struct WakeWordFrameProcessor {
-    segment_tx: SyncSender<Vec<f32>>,
+    segment_tx: tokio_mpsc::Sender<Vec<f32>>,
     vad_logged: bool,
     frame_counter: usize,
     detector: sherpa_onnx::VoiceActivityDetector,
 }
 
 impl WakeWordFrameProcessor {
-    fn new(segment_tx: SyncSender<Vec<f32>>) -> Result<Self, String> {
+    fn new(segment_tx: tokio_mpsc::Sender<Vec<f32>>) -> Result<Self, String> {
         Ok(Self {
             segment_tx,
             vad_logged: false,
@@ -145,10 +146,10 @@ impl WakeWordFrameProcessor {
 
             match self.segment_tx.try_send(clip) {
                 Ok(()) => {}
-                Err(TrySendError::Full(_)) => {
+                Err(tokio_mpsc::error::TrySendError::Full(_)) => {
                     eprintln!("[WakeWord][native] segment dropped: transcription is busy");
                 }
-                Err(TrySendError::Disconnected(_)) => {
+                Err(tokio_mpsc::error::TrySendError::Closed(_)) => {
                     eprintln!("[WakeWord][native] transcription worker disconnected");
                 }
             }
@@ -173,7 +174,7 @@ impl WakeWordTranscriber {
         }
     }
 
-    fn check_segment(&mut self, samples: Vec<f32>) -> Result<(), String> {
+    async fn check_segment(&mut self, samples: Vec<f32>) -> Result<(), String> {
         if self.wake_word_normalized.is_empty() {
             return Ok(());
         }
@@ -189,12 +190,10 @@ impl WakeWordTranscriber {
             sample_rate: SAMPLE_RATE,
         };
 
-        let result = tauri::async_runtime::block_on(async {
-            stt_service
-                .transcribe(&AudioSource::Chunk(chunk), None)
-                .await
-                .map_err(|err| err.to_string())
-        })?;
+        let result = stt_service
+            .transcribe(&AudioSource::Chunk(chunk), None)
+            .await
+            .map_err(|err| err.to_string())?;
 
         let normalized = normalize_text(&result.text);
         if normalized.contains(&self.wake_word_normalized) {
@@ -432,7 +431,7 @@ fn spawn_frame_processor(
     wake_word: String,
 ) -> Result<(), String> {
     let _ = create_voice_activity_detector()?;
-    let (segment_tx, segment_rx) = mpsc::sync_channel::<Vec<f32>>(1);
+    let (segment_tx, segment_rx) = tokio_mpsc::channel::<Vec<f32>>(1);
     spawn_transcription_worker(app.clone(), segment_rx, wake_word);
 
     std::thread::spawn(move || {
@@ -452,11 +451,15 @@ fn spawn_frame_processor(
     Ok(())
 }
 
-fn spawn_transcription_worker(app: AppHandle, segment_rx: Receiver<Vec<f32>>, wake_word: String) {
-    std::thread::spawn(move || {
+fn spawn_transcription_worker(
+    app: AppHandle,
+    mut segment_rx: tokio_mpsc::Receiver<Vec<f32>>,
+    wake_word: String,
+) {
+    tauri::async_runtime::spawn(async move {
         let mut transcriber = WakeWordTranscriber::new(app, wake_word);
-        while let Ok(segment) = segment_rx.recv() {
-            if let Err(err) = transcriber.check_segment(segment) {
+        while let Some(segment) = segment_rx.recv().await {
+            if let Err(err) = transcriber.check_segment(segment).await {
                 eprintln!("[WakeWord][native] Segment transcription failed: {err}");
             }
         }
