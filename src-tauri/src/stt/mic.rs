@@ -471,7 +471,7 @@ fn spawn_frame_processor(
     Ok(())
 }
 
-fn create_voice_activity_detector() -> Result<VoiceActivityDetector, String> {
+pub(crate) fn create_voice_activity_detector() -> Result<VoiceActivityDetector, String> {
     let model_path = ensure_silero_vad_model()?;
     eprintln!(
         "[STT][native-vad] using model path {}",

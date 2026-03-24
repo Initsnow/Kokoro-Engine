@@ -1,6 +1,7 @@
 use crate::stt::config::save_config;
 use crate::stt::{
-    AudioChunk, AudioSource, NativeMicState, SenseVoiceLocalModelStatus, SttConfig, SttService,
+    AudioChunk, AudioSource, NativeMicState, NativeWakeWordState, SenseVoiceLocalModelStatus,
+    SttConfig, SttService,
 };
 use std::sync::Arc;
 use tauri::State;
@@ -118,6 +119,23 @@ pub async fn stop_native_mic(
     mic_state: State<'_, NativeMicState>,
 ) -> Result<(), String> {
     crate::stt::mic::stop_native_mic(&app, mic_state.inner())
+}
+
+#[command]
+pub async fn start_native_wake_word(
+    app: AppHandle,
+    wake_word_state: State<'_, NativeWakeWordState>,
+    wake_word: String,
+) -> Result<(), String> {
+    crate::stt::wake_word::start_native_wake_word(&app, wake_word_state.inner(), wake_word)
+}
+
+#[command]
+pub async fn stop_native_wake_word(
+    app: AppHandle,
+    wake_word_state: State<'_, NativeWakeWordState>,
+) -> Result<(), String> {
+    crate::stt::wake_word::stop_native_wake_word(&app, wake_word_state.inner())
 }
 
 /// Return the install status of the recommended SenseVoice local model.
