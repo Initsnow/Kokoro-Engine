@@ -250,7 +250,7 @@ impl SenseVoiceLocalProvider {
                 Ok((chunk.sample_rate as i32, chunk.samples.as_ref().clone()))
             }
             AudioSource::Encoded { data, format } => {
-                if format.to_ascii_lowercase() != "wav" {
+                if !format.eq_ignore_ascii_case("wav") {
                     return Err(SttError::AudioFormatInvalid(
                         "sensevoice_local currently supports WAV input for encoded audio"
                             .to_string(),
