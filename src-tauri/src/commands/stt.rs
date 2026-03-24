@@ -126,8 +126,14 @@ pub async fn start_native_wake_word(
     app: AppHandle,
     wake_word_state: State<'_, NativeWakeWordState>,
     wake_word: String,
+    trigger_on_speech: Option<bool>,
 ) -> Result<(), String> {
-    crate::stt::wake_word::start_native_wake_word(&app, wake_word_state.inner(), wake_word)
+    crate::stt::wake_word::start_native_wake_word(
+        &app,
+        wake_word_state.inner(),
+        wake_word,
+        trigger_on_speech.unwrap_or(false),
+    )
 }
 
 #[command]

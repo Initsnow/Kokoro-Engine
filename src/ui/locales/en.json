@@ -260,6 +260,10 @@
                 "title": "Voice Interrupt",
                 "desc": "Speak to interrupt TTS playback"
             },
+            "continuous_listening": {
+                "title": "Continuous Listening",
+                "desc": "Start voice input automatically whenever speech is detected"
+            },
             "wake_word": {
                 "title": "Wake Word",
                 "desc": "Automatically start listening when the keyword is detected",

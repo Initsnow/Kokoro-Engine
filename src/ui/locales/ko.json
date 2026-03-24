@@ -260,6 +260,10 @@
                 "title": "음성 중단",
                 "desc": "말하기 시작하면 TTS 재생 중단"
             },
+            "continuous_listening": {
+                "title": "상시 듣기",
+                "desc": "음성이 감지되면 자동으로 음성 입력 시작"
+            },
             "wake_word": {
                 "title": "웨이크 워드",
                 "desc": "키워드가 감지되면 자동으로 듣기 시작",

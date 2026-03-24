@@ -14,14 +14,16 @@ const MIN_SPEECH_FRAMES = 5;
 const MAX_SPEECH_FRAMES = 125;
 
 type WakeWordTransport = "web" | "native";
+type DetectionMode = "wake_word" | "speech";
 
 export interface WakeWordOptions {
-    wakeWord: string;
+    wakeWord?: string;
     enabled: boolean;
-    onWakeWordDetected: () => void;
+    mode?: DetectionMode;
+    onWakeWordDetected: (text?: string) => void;
 }
 
-export function useWakeWord({ wakeWord, enabled, onWakeWordDetected }: WakeWordOptions) {
+export function useWakeWord({ wakeWord = "", enabled, mode = "wake_word", onWakeWordDetected }: WakeWordOptions) {
     const audioContextRef = useRef<AudioContext | null>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
     const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -31,6 +33,8 @@ export function useWakeWord({ wakeWord, enabled, onWakeWordDetected }: WakeWordO
     const transportRef = useRef<WakeWordTransport | null>(null);
     const isRunningRef = useRef(false);
     const detectionInFlightRef = useRef(false);
+    const enabledRef = useRef(enabled);
+    const startRef = useRef<(() => Promise<void>) | null>(null);
     const stopRef = useRef<(() => Promise<void>) | null>(null);
 
     const speechFramesRef = useRef(0);
@@ -39,10 +43,17 @@ export function useWakeWord({ wakeWord, enabled, onWakeWordDetected }: WakeWordO
     const clipBufferRef = useRef<number[]>([]);
 
     const wakeWordRef = useRef(wakeWord);
+    const modeRef = useRef<DetectionMode>(mode);
     const onWakeWordDetectedRef = useRef(onWakeWordDetected);
     useEffect(() => {
         wakeWordRef.current = wakeWord;
     }, [wakeWord]);
+    useEffect(() => {
+        modeRef.current = mode;
+    }, [mode]);
+    useEffect(() => {
+        enabledRef.current = enabled;
+    }, [enabled]);
     useEffect(() => {
         onWakeWordDetectedRef.current = onWakeWordDetected;
     }, [onWakeWordDetected]);
@@ -98,7 +109,7 @@ export function useWakeWord({ wakeWord, enabled, onWakeWordDetected }: WakeWordO
         transportRef.current = null;
     }, [cleanupNativeCapture, cleanupWebCapture]);
 
-    const triggerWakeWordDetected = useCallback(async () => {
+    const triggerWakeWordDetected = useCallback(async (text?: string) => {
         if (detectionInFlightRef.current) {
             return;
         }
@@ -106,14 +117,27 @@ export function useWakeWord({ wakeWord, enabled, onWakeWordDetected }: WakeWordO
         detectionInFlightRef.current = true;
         try {
             await stopRef.current?.();
-            onWakeWordDetectedRef.current();
+            onWakeWordDetectedRef.current(text);
         } finally {
             detectionInFlightRef.current = false;
+            if (modeRef.current === "speech" && enabledRef.current) {
+                setTimeout(() => {
+                    void startRef.current?.();
+                }, 0);
+            }
         }
     }, []);
 
     const checkWakeWord = useCallback(async (samples: number[]) => {
         try {
+            if (modeRef.current === "speech") {
+                const text: string = await invoke("transcribe_wake_word_audio", { samples });
+                const trimmed = text.trim();
+                if (trimmed) {
+                    await triggerWakeWordDetected(trimmed);
+                }
+                return;
+            }
             const text: string = await invoke("transcribe_wake_word_audio", { samples });
             if (!text) return;
             const normalized = text.toLowerCase().replace(/\s+/g, "");
@@ -206,13 +230,16 @@ export function useWakeWord({ wakeWord, enabled, onWakeWordDetected }: WakeWordO
     const startNativeCapture = useCallback(async () => {
         transportRef.current = "native";
         try {
-            nativeDetectedUnlisten.current = await listen<string>("stt:wake-word-detected", () => {
-                void triggerWakeWordDetected();
+            nativeDetectedUnlisten.current = await listen<string>("stt:wake-word-detected", (event) => {
+                void triggerWakeWordDetected(event.payload);
             });
             nativeErrorUnlisten.current = await listen<string>("stt:wake-word-error", (event) => {
                 console.warn("[WakeWord] Native wake word error:", event.payload);
             });
-            await invoke("start_native_wake_word", { wakeWord: wakeWordRef.current });
+            await invoke("start_native_wake_word", {
+                wakeWord: wakeWordRef.current,
+                triggerOnSpeech: modeRef.current === "speech",
+            });
         } catch (error) {
             await cleanupNativeCapture();
             transportRef.current = null;
@@ -243,11 +270,15 @@ export function useWakeWord({ wakeWord, enabled, onWakeWordDetected }: WakeWordO
     }, [startNativeCapture, startWebCapture]);
 
     useEffect(() => {
+        startRef.current = start;
+    }, [start]);
+
+    useEffect(() => {
         stopRef.current = stop;
     }, [stop]);
 
     useEffect(() => {
-        if (enabled && wakeWord.trim()) {
+        if (enabled && (mode === "speech" || wakeWord.trim())) {
             void start();
         } else {
             void stop();

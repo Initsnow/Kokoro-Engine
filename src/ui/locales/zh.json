@@ -260,6 +260,10 @@
                 "title": "语音打断",
                 "desc": "说话时打断语音播放"
             },
+            "continuous_listening": {
+                "title": "持续监听",
+                "desc": "检测到说话时自动开始语音输入"
+            },
             "wake_word": {
                 "title": "唤醒词",
                 "desc": "检测到关键词时自动开始监听",

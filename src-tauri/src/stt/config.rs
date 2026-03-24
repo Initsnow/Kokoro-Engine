@@ -63,6 +63,10 @@ pub struct SttConfig {
     #[serde(default)]
     pub wake_word_enabled: bool,
 
+    /// Continuously listen for speech and start STT without a wake word.
+    #[serde(default)]
+    pub continuous_listening: bool,
+
     /// Wake word string (e.g. "你好心音"). Case-insensitive substring match.
     #[serde(default)]
     pub wake_word: Option<String>,
@@ -156,6 +160,7 @@ impl Default for SttConfig {
             language: None,
             auto_send: false,
             wake_word_enabled: false,
+            continuous_listening: false,
             wake_word: None,
             providers: default_providers(),
         }

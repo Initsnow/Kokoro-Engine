@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState, useRef } from "react";
-import { Mic, Languages, Send, HandMetal, Server, Wand2, Download, CheckCircle, CircleAlert } from "lucide-react";
+import { Mic, Languages, Send, HandMetal, Server, Wand2, Radio, Download, CheckCircle, CircleAlert } from "lucide-react";
 import type { SttConfig, SttProviderConfig, SenseVoiceLocalModelStatus, SenseVoiceLocalDownloadProgress } from "../../../lib/kokoro-bridge";
 import { getSenseVoiceLocalStatus, downloadSenseVoiceLocalModel, onSenseVoiceLocalProgress } from "../../../lib/kokoro-bridge";
 import { Select } from "@/components/ui/select";
@@ -490,6 +490,40 @@ export default function SttTab({
                                     className={clsx(
                                         "w-5 h-5 rounded-full absolute top-0.5",
                                         voiceInterrupt ? "bg-black" : "bg-[var(--color-text-muted)]"
+                                    )}
+                                />
+                            </motion.button>
+                        </div>
+
+                        {/* Continuous listening toggle */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Radio size={14} strokeWidth={1.5} className="text-[var(--color-text-muted)]" />
+                                <div>
+                                    <div className="text-sm text-[var(--color-text-primary)]">
+                                        {t("settings.stt.continuous_listening.title")}
+                                    </div>
+                                    <div className="text-xs text-[var(--color-text-muted)]">
+                                        {t("settings.stt.continuous_listening.desc")}
+                                    </div>
+                                </div>
+                            </div>
+                            <motion.button
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => updateConfig({ continuous_listening: !sttConfig.continuous_listening })}
+                                className={clsx(
+                                    "w-12 h-6 rounded-full relative transition-colors duration-200",
+                                    sttConfig.continuous_listening
+                                        ? "bg-[var(--color-accent)]"
+                                        : "bg-[var(--color-bg-surface)] border border-[var(--color-border)]"
+                                )}
+                            >
+                                <motion.div
+                                    animate={{ x: sttConfig.continuous_listening ? 24 : 2 }}
+                                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                    className={clsx(
+                                        "w-5 h-5 rounded-full absolute top-0.5",
+                                        sttConfig.continuous_listening ? "bg-black" : "bg-[var(--color-text-muted)]"
                                     )}
                                 />
                             </motion.button>
