@@ -1,4 +1,5 @@
 use crate::ai::context::AIOrchestrator;
+use crate::ai::context::Message;
 use crate::ai::memory_extractor;
 use crate::commands::system::WindowSizeState;
 use crate::imagegen::ImageGenService;
@@ -506,7 +507,7 @@ pub async fn stream_chat(
     // Generate tool prompt from action registry
     let tool_prompt = {
         let registry = _action_registry.read().await;
-        let prompt = registry.generate_tool_prompt();
+        let prompt = registry.generate_tool_prompt_for_prompt(state.is_memory_enabled());
         if prompt.is_empty() { None } else { Some(prompt) }
     };
 
@@ -636,7 +637,15 @@ pub async fn stream_chat(
                     }
                 }
                 Err(e) => {
-                    app.emit("chat-error", e).map_err(|e| e.to_string())?;
+                    if round_response.is_empty() && emit_buffer.is_empty() {
+                        app.emit("chat-error", e).map_err(|e| e.to_string())?;
+                    } else {
+                        eprintln!(
+                            "[Chat] Ignoring trailing stream error after partial response: {}",
+                            e
+                        );
+                    }
+                    break;
                 }
             }
         }
@@ -866,28 +875,29 @@ pub async fn stream_chat(
             } else {
                 full_response.clone()
             };
-            let mut history = state.history.lock().await;
-            history.push_back(crate::ai::context::Message {
+            state.push_history_message(Message {
                 role: "assistant".to_string(),
                 content,
                 metadata: None,
-            });
-            if history.len() > 30 {
-                history.pop_front();
-            }
+            }).await;
         }
     }
 
     // Periodic memory extraction
     let msg_count = state.get_message_count().await;
-    println!("[Memory] User message count: {}, trigger at next multiple of 5", msg_count);
-    if msg_count > 0 && msg_count % 5 == 0 {
+    let memory_msg_count = state.get_memory_trigger_count().await;
+    println!("[Memory] User message count: {}, memory trigger count: {}", msg_count, memory_msg_count);
+    if state.is_memory_enabled() && memory_msg_count > 0 && memory_msg_count % 5 == 0 {
         println!("[Memory] Triggering memory extraction (count={})", msg_count);
-        let history = state.get_recent_history(10).await;
+        let history = state.get_recent_memory_history(10).await;
         let memory_mgr = state.memory_manager.clone();
         let char_id_for_mem = char_id.clone();
         let provider_for_mem = llm_state.provider().await;
+        let memory_enabled = state.memory_enabled_flag();
         tauri::async_runtime::spawn(async move {
+            if !memory_enabled.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
             memory_extractor::extract_and_store_memories(
                 &history,
                 &memory_mgr,
@@ -899,11 +909,15 @@ pub async fn stream_chat(
     }
 
     // Periodic memory consolidation (every 20 user messages)
-    if msg_count > 0 && msg_count % 20 == 0 {
+    if state.is_memory_enabled() && memory_msg_count > 0 && memory_msg_count % 20 == 0 {
         let memory_mgr = state.memory_manager.clone();
         let char_id_for_consolidation = char_id.clone();
         let provider_for_consolidation = llm_state.provider().await;
+        let memory_enabled = state.memory_enabled_flag();
         tauri::async_runtime::spawn(async move {
+            if !memory_enabled.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
             match memory_mgr
                 .consolidate_memories(&char_id_for_consolidation, provider_for_consolidation)
                 .await

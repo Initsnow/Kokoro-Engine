@@ -2,6 +2,18 @@ use crate::ai::context::AIOrchestrator;
 use crate::llm::openai::{Message as LLMMessage, MessageContent, OpenAIClient};
 use tauri::State;
 
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct MemorySystemConfig {
+    enabled: bool,
+}
+
+fn memory_config_path() -> std::path::PathBuf {
+    dirs_next::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("com.chyin.kokoro")
+        .join("memory_system_config.json")
+}
+
 #[derive(serde::Serialize)]
 pub struct EmotionStateResponse {
     pub emotion: String,
@@ -111,6 +123,26 @@ pub async fn get_proactive_enabled(
 }
 
 #[tauri::command]
+pub async fn set_memory_enabled(
+    enabled: bool,
+    state: State<'_, AIOrchestrator>,
+) -> Result<(), String> {
+    state.set_memory_enabled(enabled).await;
+    crate::config::save_json_config(
+        &memory_config_path(),
+        &MemorySystemConfig { enabled },
+        "MEMORY",
+    )
+}
+
+#[tauri::command]
+pub async fn get_memory_enabled(
+    state: State<'_, AIOrchestrator>,
+) -> Result<bool, String> {
+    Ok(state.is_memory_enabled())
+}
+
+#[tauri::command]
 pub async fn clear_history(state: State<'_, AIOrchestrator>) -> Result<(), String> {
     state.clear_history().await;
     Ok(())
@@ -175,9 +207,15 @@ pub async fn end_session(
     request: EndSessionRequest,
     state: State<'_, AIOrchestrator>,
 ) -> Result<(), String> {
+    if !state.is_memory_enabled() {
+        state.clear_history().await;
+        return Ok(());
+    }
+
     let history = state.get_recent_history(20).await;
     let char_id = state.get_character_id().await;
     let memory_mgr = state.memory_manager.clone();
+    let memory_enabled = state.memory_enabled_flag();
 
     // Clear history immediately so the user can start fresh
     state.clear_history().await;
@@ -220,6 +258,10 @@ pub async fn end_session(
                 Ok(summary) => {
                     let summary = summary.trim().to_string();
                     if !summary.is_empty() {
+                        if !memory_enabled.load(std::sync::atomic::Ordering::SeqCst) {
+                            println!("[Session] Skip saving summary because memory is disabled");
+                            return;
+                        }
                         if let Err(e) = memory_mgr.save_session_summary(&char_id, &summary).await {
                             eprintln!("[Session] Failed to save summary: {}", e);
                         } else {

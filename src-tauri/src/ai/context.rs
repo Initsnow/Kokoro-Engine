@@ -10,6 +10,7 @@ use sqlx::SqlitePool;
 use std::collections::VecDeque;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tokio::sync::Mutex;
 
@@ -41,8 +42,14 @@ pub struct AIOrchestrator {
     pub router: Arc<ModelRouter>,
     /// Counts user messages for periodic memory extraction triggers.
     message_count: Arc<Mutex<u64>>,
+    /// Counts user messages that occurred while the memory system was enabled.
+    memory_trigger_count: Arc<Mutex<u64>>,
+    /// History index boundary used to prevent extracting conversations from disabled periods.
+    memory_history_boundary: Arc<Mutex<usize>>,
     /// Current character ID for memory isolation.
     character_id: Arc<Mutex<String>>,
+    /// Global toggle for all automatic memory reads/writes/injection.
+    memory_enabled: Arc<AtomicBool>,
     /// Emotion state with per-character personality.
     pub emotion_state: Arc<Mutex<EmotionState>>,
     /// Timestamp of last user activity (for idle detection).
@@ -216,7 +223,10 @@ impl AIOrchestrator {
             memory_manager,
             router: Arc::new(ModelRouter::new()),
             message_count: Arc::new(Mutex::new(0)),
+            memory_trigger_count: Arc::new(Mutex::new(0)),
+            memory_history_boundary: Arc::new(Mutex::new(0)),
             character_id: Arc::new(Mutex::new("default".to_string())),
+            memory_enabled: Arc::new(AtomicBool::new(true)),
             emotion_state: Arc::new(Mutex::new(EmotionState::new(EmotionPersonality::default()))),
             last_activity: Arc::new(Mutex::new(Instant::now())),
             conversation_count: Arc::new(Mutex::new(0)),
@@ -370,15 +380,24 @@ impl AIOrchestrator {
         *cid = id.clone();
         drop(cid);
 
-        // Restore emotion snapshot from disk when switching characters
+        // Restore emotion snapshot from disk only when memory is enabled.
+        // Otherwise reset to the active persona's default state to avoid cross-character leakage.
         if changed {
-            if let Ok(Some(snap)) = self.memory_manager.load_emotion_snapshot(&id).await {
-                let mut emotion = self.emotion_state.lock().await;
-                emotion.restore_from_snapshot(&snap);
-                println!(
-                    "[Emotion] Restored snapshot for '{}': {} (mood={:.2})",
-                    id, snap.emotion, snap.mood
-                );
+            let mut emotion = self.emotion_state.lock().await;
+            if self.is_memory_enabled() {
+                if let Ok(Some(snap)) = self.memory_manager.load_emotion_snapshot(&id).await {
+                    emotion.restore_from_snapshot(&snap);
+                    println!(
+                        "[Emotion] Restored snapshot for '{}': {} (mood={:.2})",
+                        id, snap.emotion, snap.mood
+                    );
+                } else {
+                    let personality = emotion.personality().clone();
+                    emotion.set_personality_with_reset(personality, true);
+                }
+            } else {
+                let personality = emotion.personality().clone();
+                emotion.set_personality_with_reset(personality, true);
             }
         }
     }
@@ -396,6 +415,10 @@ impl AIOrchestrator {
         if role == "user" {
             let mut count = self.message_count.lock().await;
             *count += 1;
+            if self.is_memory_enabled() {
+                let mut memory_count = self.memory_trigger_count.lock().await;
+                *memory_count += 1;
+            }
         }
 
         // Truncate single message if too long
@@ -420,11 +443,15 @@ impl AIOrchestrator {
         // Rolling window: keep at most 30 messages
         // If summary strategy, compress oldest 10 when exceeding 20
         let strategy = self.context_strategy.lock().await.clone();
-        if history.len() > 20 && strategy == "summary" {
+        if history.len() > 20 && strategy == "summary" && self.is_memory_enabled() {
             // Take oldest 10 for summarization
             let to_summarize: Vec<Message> = history.iter().take(10).cloned().collect();
             for _ in 0..10 {
                 history.pop_front();
+            }
+            {
+                let mut boundary = self.memory_history_boundary.lock().await;
+                *boundary = boundary.saturating_sub(10);
             }
             drop(history);
 
@@ -451,6 +478,8 @@ impl AIOrchestrator {
             });
         } else if history.len() > 30 {
             history.pop_front();
+            let mut boundary = self.memory_history_boundary.lock().await;
+            *boundary = boundary.saturating_sub(1);
         }
     }
 
@@ -620,6 +649,10 @@ impl AIOrchestrator {
         *self.message_count.lock().await
     }
 
+    pub async fn get_memory_trigger_count(&self) -> u64 {
+        *self.memory_trigger_count.lock().await
+    }
+
     /// Returns the last `n` messages from history for memory extraction.
     pub async fn get_recent_history(&self, n: usize) -> Vec<Message> {
         let history = self.history.lock().await;
@@ -629,6 +662,60 @@ impl AIOrchestrator {
             0
         };
         history.iter().skip(start).cloned().collect()
+    }
+
+    /// Returns the last `n` messages after the current memory boundary.
+    pub async fn get_recent_memory_history(&self, n: usize) -> Vec<Message> {
+        let history = self.history.lock().await;
+        let boundary = (*self.memory_history_boundary.lock().await).min(history.len());
+        let visible_len = history.len().saturating_sub(boundary);
+        let start = boundary + visible_len.saturating_sub(n);
+        history.iter().skip(start).cloned().collect()
+    }
+
+    pub fn is_memory_enabled(&self) -> bool {
+        self.memory_enabled.load(Ordering::SeqCst)
+    }
+
+    pub fn memory_enabled_flag(&self) -> Arc<AtomicBool> {
+        self.memory_enabled.clone()
+    }
+
+    pub async fn set_memory_enabled(&self, enabled: bool) {
+        self.memory_enabled.store(enabled, Ordering::SeqCst);
+        {
+            let mut trigger_count = self.memory_trigger_count.lock().await;
+            *trigger_count = 0;
+        }
+        {
+            let history_len = self.history.lock().await.len();
+            let mut boundary = self.memory_history_boundary.lock().await;
+            *boundary = history_len;
+        }
+        if !enabled {
+            let mut emotion = self.emotion_state.lock().await;
+            let personality = emotion.personality().clone();
+            emotion.set_personality_with_reset(personality, true);
+        }
+    }
+
+    /// Append a message to in-memory history only and keep the memory boundary aligned
+    /// with the rolling window behavior used by assistant streaming responses.
+    pub async fn push_history_message(&self, message: Message) {
+        let mut history = self.history.lock().await;
+        history.push_back(message);
+        let evicted = if history.len() > 30 {
+            history.pop_front();
+            true
+        } else {
+            false
+        };
+        drop(history);
+
+        if evicted {
+            let mut boundary = self.memory_history_boundary.lock().await;
+            *boundary = boundary.saturating_sub(1);
+        }
     }
 
     /// Composes a prompt based on the user query, budgeting tokens for context
@@ -651,11 +738,14 @@ impl AIOrchestrator {
         // Only if query looks like it needs context or every N turns
         // For now, always try to fetch relevant memories (scoped to current character)
         let cid = character_id;
-        let memories = self
-            .memory_manager
-            .search_memories(query, 5, cid)
-            .await
-            .ok();
+        let memories = if self.is_memory_enabled() {
+            self.memory_manager
+                .search_memories(query, 5, cid)
+                .await
+                .ok()
+        } else {
+            None
+        };
 
         let sp = self.system_prompt.lock().await;
         let history = self.history.lock().await;
@@ -782,22 +872,24 @@ impl AIOrchestrator {
 
         // -- Session Summaries (P1.5) --
         // Inject recent session summaries so the character remembers past conversations
-        if let Ok(summaries) = self.memory_manager.get_recent_summaries(cid, 2).await {
-            if !summaries.is_empty() {
-                let summary_block = summaries
-                    .iter()
-                    .enumerate()
-                    .map(|(i, s)| format!("{}. {}", i + 1, s))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                final_messages.push(Message {
-                    role: "system".to_string(),
-                    content: format!(
-                        "Previous conversation summaries (most recent first):\n{}",
-                        summary_block
-                    ),
-                    metadata: Some(serde_json::json!({"type": "session_summary"})),
-                });
+        if self.is_memory_enabled() {
+            if let Ok(summaries) = self.memory_manager.get_recent_summaries(cid, 2).await {
+                if !summaries.is_empty() {
+                    let summary_block = summaries
+                        .iter()
+                        .enumerate()
+                        .map(|(i, s)| format!("{}. {}", i + 1, s))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    final_messages.push(Message {
+                        role: "system".to_string(),
+                        content: format!(
+                            "Previous conversation summaries (most recent first):\n{}",
+                            summary_block
+                        ),
+                        metadata: Some(serde_json::json!({"type": "session_summary"})),
+                    });
+                }
             }
         }
 
@@ -906,6 +998,9 @@ impl AIOrchestrator {
     pub async fn clear_history(&self) {
         let mut history = self.history.lock().await;
         history.clear();
+        drop(history);
+        *self.memory_history_boundary.lock().await = 0;
+        *self.memory_trigger_count.lock().await = 0;
         // 清空当前对话 ID，下次发消息时会创建新对话
         let mut conv_id = self.current_conversation_id.lock().await;
         *conv_id = None;

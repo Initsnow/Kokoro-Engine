@@ -375,6 +375,11 @@
             "count_one": "{{count}} memory",
             "count_other": "{{count}} memories",
             "active_char": "(active)",
+            "toggle": {
+                "label": "Enable Memory System",
+                "desc": "When disabled, the character will not read, write, extract, or consolidate memories. Re-enabling resumes from new conversations only.",
+                "disabled_hint": "Memory system is disabled. Existing memories can still be viewed, but they will not be injected into chat and no new memories, summaries, or emotion snapshots will be created."
+            },
             "tabs": {
                 "list": "List",
                 "timeline": "Timeline",

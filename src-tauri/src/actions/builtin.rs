@@ -150,6 +150,15 @@ impl ActionHandler for SetBackgroundAction {
 
 pub struct SearchMemoryAction;
 
+fn ensure_memory_enabled(ctx: &ActionContext) -> Result<(), ActionError> {
+    let orchestrator = ctx.app.state::<crate::ai::context::AIOrchestrator>();
+    if orchestrator.is_memory_enabled() {
+        Ok(())
+    } else {
+        Err(ActionError("Memory system is currently disabled.".into()))
+    }
+}
+
 #[async_trait]
 impl ActionHandler for SearchMemoryAction {
     fn name(&self) -> &str {
@@ -177,6 +186,7 @@ impl ActionHandler for SearchMemoryAction {
         args: HashMap<String, String>,
         ctx: ActionContext,
     ) -> Result<ActionResult, ActionError> {
+        ensure_memory_enabled(&ctx)?;
         let query = args
             .get("query")
             .ok_or_else(|| ActionError("Missing 'query' parameter".into()))?;
@@ -236,6 +246,7 @@ impl ActionHandler for StoreMemoryAction {
         args: HashMap<String, String>,
         ctx: ActionContext,
     ) -> Result<ActionResult, ActionError> {
+        ensure_memory_enabled(&ctx)?;
         let fact = args
             .get("fact")
             .ok_or_else(|| ActionError("Missing 'fact' parameter".into()))?;
@@ -302,6 +313,7 @@ impl ActionHandler for ForgetMemoryAction {
         args: HashMap<String, String>,
         ctx: ActionContext,
     ) -> Result<ActionResult, ActionError> {
+        ensure_memory_enabled(&ctx)?;
         let query = args
             .get("query")
             .ok_or_else(|| ActionError("Missing 'query' parameter".into()))?;

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Check, X, Search, Brain, ChevronDown, List, Calendar, Share2, UserCircle } from "lucide-react";
 import { inputClasses } from "../styles/settings-primitives";
 import { Select } from "@/components/ui/select";
-import { listMemories, updateMemory, deleteMemory, listCharacters } from "../../lib/kokoro-bridge";
+import { listMemories, updateMemory, deleteMemory, listCharacters, getMemoryEnabled, setMemoryEnabled } from "../../lib/kokoro-bridge";
 import type { MemoryRecord, CharacterRecord } from "../../lib/kokoro-bridge";
 import { listen } from "@tauri-apps/api/event";
 import { MemoryTimeline } from "./memory/MemoryTimeline";
@@ -29,6 +29,8 @@ export default function MemoryPanel({ characterId }: MemoryPanelProps) {
     const [editImportance, setEditImportance] = useState(0.5);
     const [deletingId, setDeletingId] = useState<number | null>(null);
     const [page, setPage] = useState(0);
+    const [memoryEnabled, setMemoryEnabledState] = useState(true);
+    const [togglingMemory, setTogglingMemory] = useState(false);
     const pageSize = 50; // Load more for graph/timeline
 
     // ── Character selector state ──
@@ -44,6 +46,12 @@ export default function MemoryPanel({ characterId }: MemoryPanelProps) {
             }
         }).catch((e) => console.error("[MemoryPanel] Failed to load characters:", e));
     }, [characterId]);
+
+    useEffect(() => {
+        getMemoryEnabled()
+            .then(setMemoryEnabledState)
+            .catch((e) => console.error("[MemoryPanel] Failed to load memory toggle:", e));
+    }, []);
 
     // Reset page when switching characters
     useEffect(() => {
@@ -119,6 +127,19 @@ export default function MemoryPanel({ characterId }: MemoryPanelProps) {
 
     const hasMore = (page + 1) * pageSize < total;
 
+    const handleToggleMemory = async () => {
+        const next = !memoryEnabled;
+        setTogglingMemory(true);
+        try {
+            await setMemoryEnabled(next);
+            setMemoryEnabledState(next);
+        } catch (e) {
+            console.error("[MemoryPanel] Failed to toggle memory system:", e);
+        } finally {
+            setTogglingMemory(false);
+        }
+    };
+
     // Helpers
     const getTimeAgo = (ts: number) => {
         const now = Date.now() / 1000;
@@ -159,6 +180,42 @@ export default function MemoryPanel({ characterId }: MemoryPanelProps) {
                     <span className="text-[10px] font-mono text-[var(--color-text-muted)]">
                         {t("settings.memory.count", { count: total })}
                     </span>
+                </div>
+
+                <div className="rounded-lg border border-[var(--color-border)] bg-black/20 p-3">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                            <div className="text-sm font-heading font-semibold text-[var(--color-text-primary)]">
+                                {t("settings.memory.toggle.label")}
+                            </div>
+                            <p className="text-xs text-[var(--color-text-muted)]">
+                                {t("settings.memory.toggle.desc")}
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleToggleMemory}
+                            disabled={togglingMemory}
+                            className={clsx(
+                                "relative h-6 w-11 rounded-full transition-colors disabled:opacity-60",
+                                memoryEnabled ? "bg-[var(--color-accent)]" : "bg-[var(--color-border)]"
+                            )}
+                            role="switch"
+                            aria-checked={memoryEnabled}
+                            aria-label={t("settings.memory.toggle.label")}
+                        >
+                            <span
+                                className={clsx(
+                                    "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform",
+                                    memoryEnabled && "translate-x-5"
+                                )}
+                            />
+                        </button>
+                    </div>
+                    {!memoryEnabled && (
+                        <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                            {t("settings.memory.toggle.disabled_hint")}
+                        </div>
+                    )}
                 </div>
 
                 {/* Character Selector */}

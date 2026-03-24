@@ -287,7 +287,7 @@ async fn handle_text(
         .ok_or("ActionRegistry not available")?;
     let tool_prompt = {
         let registry = action_registry.read().await;
-        let p = registry.generate_tool_prompt();
+        let p = registry.generate_tool_prompt_for_prompt(orchestrator.is_memory_enabled());
         if p.is_empty() { None } else { Some(p) }
     };
 
@@ -428,14 +428,19 @@ async fn handle_text(
 
     // Trigger periodic memory extraction (every 5 user messages)
     let msg_count = orchestrator.get_message_count().await;
-    println!("[Telegram/Memory] User message count: {}, char_id: {}", msg_count, char_id);
-    if msg_count > 0 && msg_count % 5 == 0 {
+    let memory_msg_count = orchestrator.get_memory_trigger_count().await;
+    println!("[Telegram/Memory] User message count: {}, memory trigger count: {}, char_id: {}", msg_count, memory_msg_count, char_id);
+    if orchestrator.is_memory_enabled() && memory_msg_count > 0 && memory_msg_count % 5 == 0 {
         println!("[Telegram/Memory] Triggering memory extraction (count={})", msg_count);
-        let history = orchestrator.get_recent_history(10).await;
+        let history = orchestrator.get_recent_memory_history(10).await;
         let memory_mgr = orchestrator.memory_manager.clone();
         let provider_for_mem = llm_service.provider().await;
         let char_id_for_mem = char_id.clone();
+        let memory_enabled = orchestrator.memory_enabled_flag();
         tauri::async_runtime::spawn(async move {
+            if !memory_enabled.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
             memory_extractor::extract_and_store_memories(
                 &history,
                 &memory_mgr,
@@ -445,11 +450,15 @@ async fn handle_text(
             .await;
         });
     }
-    if msg_count > 0 && msg_count % 20 == 0 {
+    if orchestrator.is_memory_enabled() && memory_msg_count > 0 && memory_msg_count % 20 == 0 {
         let memory_mgr = orchestrator.memory_manager.clone();
         let char_id_for_consolidation = char_id.clone();
         let provider_for_consolidation = llm_service.provider().await;
+        let memory_enabled = orchestrator.memory_enabled_flag();
         tauri::async_runtime::spawn(async move {
+            if !memory_enabled.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
             match memory_mgr
                 .consolidate_memories(&char_id_for_consolidation, provider_for_consolidation)
                 .await
@@ -627,7 +636,7 @@ async fn handle_photo(
         .ok_or("ActionRegistry not available")?;
     let tool_prompt = {
         let registry = action_registry.read().await;
-        let p = registry.generate_tool_prompt();
+        let p = registry.generate_tool_prompt_for_prompt(orchestrator.is_memory_enabled());
         if p.is_empty() { None } else { Some(p) }
     };
 
@@ -776,14 +785,19 @@ async fn handle_photo(
 
     // Trigger periodic memory extraction (every 5 user messages)
     let msg_count = orchestrator.get_message_count().await;
-    println!("[Telegram/Memory] User message count: {}, char_id: {}", msg_count, char_id);
-    if msg_count > 0 && msg_count % 5 == 0 {
+    let memory_msg_count = orchestrator.get_memory_trigger_count().await;
+    println!("[Telegram/Memory] User message count: {}, memory trigger count: {}, char_id: {}", msg_count, memory_msg_count, char_id);
+    if orchestrator.is_memory_enabled() && memory_msg_count > 0 && memory_msg_count % 5 == 0 {
         println!("[Telegram/Memory] Triggering memory extraction (count={})", msg_count);
-        let history = orchestrator.get_recent_history(10).await;
+        let history = orchestrator.get_recent_memory_history(10).await;
         let memory_mgr = orchestrator.memory_manager.clone();
         let provider_for_mem = llm_service.provider().await;
         let char_id_for_mem = char_id.clone();
+        let memory_enabled = orchestrator.memory_enabled_flag();
         tauri::async_runtime::spawn(async move {
+            if !memory_enabled.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
             memory_extractor::extract_and_store_memories(
                 &history,
                 &memory_mgr,
@@ -793,11 +807,15 @@ async fn handle_photo(
             .await;
         });
     }
-    if msg_count > 0 && msg_count % 20 == 0 {
+    if orchestrator.is_memory_enabled() && memory_msg_count > 0 && memory_msg_count % 20 == 0 {
         let memory_mgr = orchestrator.memory_manager.clone();
         let char_id_for_consolidation = char_id.clone();
         let provider_for_consolidation = llm_service.provider().await;
+        let memory_enabled = orchestrator.memory_enabled_flag();
         tauri::async_runtime::spawn(async move {
+            if !memory_enabled.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
             match memory_mgr
                 .consolidate_memories(&char_id_for_consolidation, provider_for_consolidation)
                 .await
