@@ -81,6 +81,7 @@ The project includes a complete official demo MOD (`mods/genshin-theme`) that re
 
 The following features are planned, in development, or **not yet tested/verified due to device or funding limitations**:
 
+- [ ] **Linux and macOS Support**: Currently only thoroughly tested on Windows. Full feature verification and optimization needed on Linux and macOS.
 - [ ] **Deep Testing of Online Services**: Verify more commercial APIs besides LLM (e.g., Azure TTS, Google STT, etc.).
 - [ ] **Mobile Support**: iOS / Android client applications.
 - [x] **Tiered Memory System**: Tiered memory (core/ephemeral), hybrid retrieval (semantic + BM25 RRF fusion), and LLM-driven memory consolidation.
