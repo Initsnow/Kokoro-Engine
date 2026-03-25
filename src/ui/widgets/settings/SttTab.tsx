@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState, useRef } from "react";
-import { Mic, Languages, Send, HandMetal, Server, Wand2, Radio, Download, CheckCircle, CircleAlert } from "lucide-react";
+import { Mic, Languages, Send, HandMetal, Server, Wand2, Radio, Download } from "lucide-react";
 import type { SttConfig, SttProviderConfig, SenseVoiceLocalModelStatus, SenseVoiceLocalDownloadProgress } from "../../../lib/kokoro-bridge";
 import { getSenseVoiceLocalStatus, downloadSenseVoiceLocalModel, onSenseVoiceLocalProgress } from "../../../lib/kokoro-bridge";
 import { Select } from "@/components/ui/select";
@@ -88,13 +88,11 @@ function SenseVoiceLocalPanel({ config, onUpdate }: {
                     </div>
                     {modelStatus && (
                         modelStatus.installed ? (
-                            <span className="flex items-center gap-1 text-xs text-emerald-400">
-                                <CheckCircle size={12} />
+                            <span className="text-xs text-emerald-400">
                                 {t("settings.stt.sensevoice_local.installed")}
                             </span>
                         ) : (
-                            <span className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
-                                <CircleAlert size={12} />
+                            <span className="text-xs text-[var(--color-text-muted)]">
                                 {t("settings.stt.sensevoice_local.not_installed")}
                             </span>
                         )
@@ -133,7 +131,7 @@ function SenseVoiceLocalPanel({ config, onUpdate }: {
                                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
                                 modelStatus?.installed
                                     ? "text-[var(--color-text-muted)] bg-[var(--color-bg-elevated)] cursor-not-allowed opacity-50"
-                                    : "text-[var(--color-bg-base)] bg-[var(--color-accent)] hover:opacity-90 active:scale-95"
+                                    : "text-black bg-[var(--color-accent)] hover:opacity-90 active:scale-95"
                             )}
                         >
                             <Download size={12} />
