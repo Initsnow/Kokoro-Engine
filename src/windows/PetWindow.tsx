@@ -63,7 +63,7 @@ export default function PetWindow() {
     // On mount: restore saved window size from config
     useEffect(() => {
         invoke<PetConfig>("get_pet_config").then(cfg => {
-            if (cfg.window_width > 0 && cfg.window_height > 0) {
+            if (cfg.window_width >= 100 && cfg.window_height >= 100) {
                 setCanvasSize({ width: cfg.window_width, height: cfg.window_height });
                 invoke("resize_pet_window", { width: cfg.window_width, height: cfg.window_height }).catch(console.error);
             }

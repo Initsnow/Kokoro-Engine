@@ -117,8 +117,15 @@ export default function PetTab() {
         setConfig(newCfg);
         await invoke("save_pet_config", { config: newCfg }).catch(console.error);
         if (enabled) {
-            await invoke("show_pet_window").catch(console.error);
+            console.log("[PetTab] Calling show_pet_window...");
+            try {
+                const result = await invoke("show_pet_window");
+                console.log("[PetTab] show_pet_window result:", result);
+            } catch (e) {
+                console.error("[PetTab] show_pet_window error:", e);
+            }
         } else {
+            console.log("[PetTab] Calling hide_pet_window...");
             await invoke("hide_pet_window").catch(console.error);
         }
     };

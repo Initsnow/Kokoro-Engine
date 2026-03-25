@@ -57,19 +57,26 @@ fn save_pet_config_to_disk(config: &PetConfig) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn show_pet_window(app: tauri::AppHandle) -> Result<(), String> {
+    println!("[pet] show_pet_window called");
+    let windows: Vec<String> = app.webview_windows().keys().cloned().collect();
+    println!("[pet] available windows: {:?}", windows);
     if let Some(win) = app.get_webview_window("pet") {
+        println!("[pet] found pet window, showing...");
         let cfg = load_pet_config();
-        // Restore saved position so window doesn't appear off-screen
         let x = if cfg.position_x != 0 { cfg.position_x } else { 100 };
         let y = if cfg.position_y != 0 { cfg.position_y } else { 100 };
         win.set_position(tauri::PhysicalPosition::new(x, y))
             .map_err(|e| e.to_string())?;
-        if cfg.window_width > 0 && cfg.window_height > 0 {
-            win.set_size(tauri::PhysicalSize::new(cfg.window_width, cfg.window_height))
-                .map_err(|e| e.to_string())?;
-        }
+        let w = if cfg.window_width >= 100 { cfg.window_width } else { 400 };
+        let h = if cfg.window_height >= 100 { cfg.window_height } else { 600 };
+        win.set_size(tauri::PhysicalSize::new(w, h))
+            .map_err(|e| e.to_string())?;
         win.show().map_err(|e| e.to_string())?;
         win.set_focus().map_err(|e| e.to_string())?;
+        println!("[pet] pet window shown successfully");
+    } else {
+        println!("[pet] ERROR: pet window not found!");
+        return Err("Pet window not found".to_string());
     }
     Ok(())
 }

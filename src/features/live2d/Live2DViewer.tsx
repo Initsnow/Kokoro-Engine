@@ -231,13 +231,19 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                         let scale: number;
 
                         if (fixedSize) {
-                            // Pet window uses a bottom-aligned, height-first fit.
-                            // Start by nearly filling the available height, then clamp to width if needed.
-                            const baseScale = Math.min(scaleY * 0.98, scaleX * 1.15);
-                            scale = baseScale * scaleMultiplierRef.current;
+                            // Use model.width/height (not getBounds) to avoid animation padding
+                            model.scale.set(1);
+                            model.x = 0;
+                            model.y = 0;
+                            const naturalWidth = model.width;
+                            const naturalHeight = model.height;
+                            const fitScaleX = app.screen.width / naturalWidth;
+                            const fitScaleY = app.screen.height / naturalHeight;
+                            scale = Math.min(fitScaleX, fitScaleY) * scaleMultiplierRef.current;
                             model.scale.set(scale);
+                            // Center both axes
                             model.x = (app.screen.width - model.width) / 2;
-                            model.y = app.screen.height - model.height;
+                            model.y = (app.screen.height - model.height) / 2;
                             return;
                         }
 
