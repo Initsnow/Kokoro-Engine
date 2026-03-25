@@ -56,6 +56,7 @@ export default function PetWindow() {
     const isResizeModeRef = useRef(false);
     const rightClickStartRef = useRef<{ x: number; y: number } | null>(null);
     const userScaleMultiplierRef = useRef(1);
+    const hasSavedSizeRef = useRef(false);
     const [configLoaded, setConfigLoaded] = useState(false);
     const [scaleMultiplier, setScaleMultiplier] = useState(1);
     const { isStreaming, sendMessage } = usePetChat();
@@ -64,6 +65,7 @@ export default function PetWindow() {
     useEffect(() => {
         invoke<PetConfig>("get_pet_config").then(cfg => {
             if (cfg.window_width >= 100 && cfg.window_height >= 100) {
+                hasSavedSizeRef.current = true;
                 setCanvasSize({ width: cfg.window_width, height: cfg.window_height });
                 invoke("resize_pet_window", { width: cfg.window_width, height: cfg.window_height }).catch(console.error);
             }
@@ -76,16 +78,21 @@ export default function PetWindow() {
         });
     }, []);
 
-    // Handle model loaded - auto-fit the first window size to model bounds
+    // Handle model loaded - auto-fit only on first launch (no saved size)
     const handleModelLoaded = useCallback(async (bounds: { width: number; height: number }) => {
         console.log("[PetWindow] Model loaded with natural bounds:", bounds);
 
-        // First launch: auto-fit to model bounds
+        // Skip auto-fit if user already has a saved size
+        if (hasSavedSizeRef.current) {
+            console.log("[PetWindow] Saved size exists, skipping auto-fit");
+            return;
+        }
+
         const padding = 30;
         const newWidth = Math.ceil(bounds.width + padding);
         const newHeight = Math.ceil(bounds.height + padding);
 
-        console.log("[PetWindow] Setting canvas size to:", newWidth, "x", newHeight);
+        console.log("[PetWindow] First launch, setting canvas size to:", newWidth, "x", newHeight);
         setCanvasSize({ width: newWidth, height: newHeight });
 
         try {
