@@ -402,13 +402,27 @@ pub fn run() {
             app.manage(Arc::new(tokio::sync::Mutex::new(vision_server)));
 
             // ModManager init: spawns QuickJS thread + event relay
-            let mut mods_path = std::path::PathBuf::from("mods");
-            if !mods_path.exists() {
-                 let parent_mods = std::path::Path::new("../mods");
-                 if parent_mods.exists() {
-                     mods_path = parent_mods.to_path_buf();
-                 }
-            }
+            // In debug (dev) mode, fall back to the project-relative `mods/` directory
+            // so developers can iterate without copying mods to the app data dir.
+            // In release builds, always use the absolute app data path so macOS/Linux
+            // bundled apps find mods regardless of the process working directory.
+            #[cfg(debug_assertions)]
+            let mods_path = {
+                let direct = std::path::PathBuf::from("mods");
+                if direct.exists() {
+                    direct
+                } else {
+                    let parent = std::path::PathBuf::from("../mods");
+                    if parent.exists() {
+                        parent
+                    } else {
+                        app_data.join("mods")
+                    }
+                }
+            };
+            #[cfg(not(debug_assertions))]
+            let mods_path = app_data.join("mods");
+            let _ = std::fs::create_dir_all(&mods_path);
             let mut mod_manager = ModManager::new(mods_path);
             mod_manager.init(app.handle().clone());
             app.manage(tokio::sync::Mutex::new(mod_manager));

@@ -23,10 +23,23 @@ pub fn handle_mod_request<R: tauri::Runtime>(
             .unwrap();
     }
 
-    let clean_path = path_str.strip_prefix('/').unwrap_or(path_str);
+    // macOS WKWebView and Windows WebView2 parse custom scheme URLs differently:
+    //   mod://genshin-mod/chat.html
+    //   - WKWebView:  host="genshin-mod", path="/chat.html"
+    //   - WebView2:   host="",            path="genshin-mod/chat.html"
+    // Include the host (mod-id) in the path so both platforms resolve correctly.
+    let host = uri.host().unwrap_or("");
+    let bare_path = path_str.strip_prefix('/').unwrap_or(path_str);
+    let clean_path = if host.is_empty() {
+        bare_path.to_string()
+    } else {
+        format!("{}/{}", host, bare_path)
+    };
 
-    // Resolve the mods directory — during `cargo tauri dev` the CWD is
-    // `src-tauri/`, so we fall back to `../mods` if `mods/` doesn't exist.
+    // In debug (dev) mode, fall back to the project-relative `mods/` directory.
+    // In release builds, use the absolute app data path so macOS/Linux bundled
+    // apps serve mod files regardless of the process working directory.
+    #[cfg(debug_assertions)]
     let mods_base = {
         let direct = PathBuf::from("mods");
         if direct.exists() {
@@ -36,10 +49,18 @@ pub fn handle_mod_request<R: tauri::Runtime>(
             if parent.exists() {
                 parent
             } else {
-                direct
+                dirs_next::data_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join("com.chyin.kokoro")
+                    .join("mods")
             }
         }
     };
+    #[cfg(not(debug_assertions))]
+    let mods_base = dirs_next::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("com.chyin.kokoro")
+        .join("mods");
     let file_path = mods_base.join(clean_path);
 
     // Security: 验证规范路径在 mods 目录内，防止符号链接绕过
