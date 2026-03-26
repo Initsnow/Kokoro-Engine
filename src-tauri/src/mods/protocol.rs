@@ -23,17 +23,23 @@ pub fn handle_mod_request<R: tauri::Runtime>(
             .unwrap();
     }
 
-    // macOS WKWebView and Windows WebView2 parse custom scheme URLs differently:
-    //   mod://genshin-mod/chat.html
-    //   - WKWebView:  host="genshin-mod", path="/chat.html"
-    //   - WebView2:   host="",            path="genshin-mod/chat.html"
-    // Include the host (mod-id) in the path so both platforms resolve correctly.
-    let host = uri.host().unwrap_or("");
-    let bare_path = path_str.strip_prefix('/').unwrap_or(path_str);
-    let clean_path = if host.is_empty() {
-        bare_path.to_string()
-    } else {
-        format!("{}/{}", host, bare_path)
+    // macOS WKWebView and Linux WebKitGTK parse custom scheme URLs as:
+    //   mod://genshin-theme/chat.html → host="genshin-theme", path="/chat.html"
+    // Windows WebView2 rewrites custom schemes to http://<scheme>.localhost/:
+    //   http://mod.localhost/genshin-theme/chat.html → host="mod.localhost", path="/genshin-theme/chat.html"
+    // So on Windows the mod-id is already in the path; on macOS/Linux we must prepend the host.
+    #[cfg(target_os = "windows")]
+    let clean_path = path_str.strip_prefix('/').unwrap_or(path_str).to_string();
+
+    #[cfg(not(target_os = "windows"))]
+    let clean_path = {
+        let host = uri.host().unwrap_or("");
+        let bare_path = path_str.strip_prefix('/').unwrap_or(path_str);
+        if host.is_empty() {
+            bare_path.to_string()
+        } else {
+            format!("{}/{}", host, bare_path)
+        }
     };
 
     // In debug (dev) mode, fall back to the project-relative `mods/` directory.
