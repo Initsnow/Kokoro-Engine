@@ -45,6 +45,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "../mods": "mods"
+    },
     "windows": {
       "nsis": {
         "installerHooks": "nsis/hooks.nsh"

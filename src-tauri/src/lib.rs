@@ -423,6 +423,29 @@ pub fn run() {
             #[cfg(not(debug_assertions))]
             let mods_path = app_data.join("mods");
             let _ = std::fs::create_dir_all(&mods_path);
+
+            // On first run, copy bundled default mods from the app resource dir
+            // to the user's app data mods dir. Only copies mods that don't exist yet,
+            // so user deletions are respected and not overwritten on next launch.
+            #[cfg(not(debug_assertions))]
+            if let Ok(resource_dir) = app.path().resource_dir() {
+                let bundled_mods = resource_dir.join("mods");
+                if bundled_mods.is_dir() {
+                    if let Ok(entries) = std::fs::read_dir(&bundled_mods) {
+                        for entry in entries.flatten() {
+                            let target = mods_path.join(entry.file_name());
+                            if !target.exists() {
+                                if let Err(e) = copy_dir_all(entry.path(), &target) {
+                                    eprintln!("[Mods] Failed to copy bundled mod {:?}: {}", entry.file_name(), e);
+                                } else {
+                                    println!("[Mods] Installed bundled mod {:?}", entry.file_name());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             let mut mod_manager = ModManager::new(mods_path);
             mod_manager.init(app.handle().clone());
             app.manage(tokio::sync::Mutex::new(mod_manager));
@@ -511,4 +534,19 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Recursively copy a directory tree from `src` to `dst`.
+fn copy_dir_all(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
