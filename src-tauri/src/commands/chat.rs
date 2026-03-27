@@ -2,6 +2,7 @@ use crate::ai::context::AIOrchestrator;
 use crate::ai::context::Message;
 use crate::ai::memory_extractor;
 use crate::commands::system::WindowSizeState;
+use crate::error::KokoroError;
 use crate::imagegen::ImageGenService;
 use crate::llm::service::LlmService;
 use futures::StreamExt;
@@ -19,7 +20,7 @@ pub struct ContextSettings {
 #[tauri::command]
 pub async fn get_context_settings(
     state: State<'_, AIOrchestrator>,
-) -> Result<ContextSettings, String> {
+) -> Result<ContextSettings, KokoroError> {
     let (strategy, max_message_chars) = state.get_context_settings().await;
     Ok(ContextSettings { strategy, max_message_chars })
 }
@@ -28,7 +29,7 @@ pub async fn get_context_settings(
 pub async fn set_context_settings(
     state: State<'_, AIOrchestrator>,
     settings: ContextSettings,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     // Validate strategy
     let strategy = if settings.strategy == "summary" {
         "summary".to_string()
@@ -359,7 +360,7 @@ pub async fn stream_chat(
         '_,
         std::sync::Arc<tokio::sync::Mutex<crate::vision::server::VisionServer>>,
     >,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     // 0. Resolve character ID for this request (not stored in shared state)
     let char_id = request
         .character_id
@@ -483,7 +484,7 @@ pub async fn stream_chat(
                         action: action_name.clone(),
                     },
                 )
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| KokoroError::Chat(e.to_string()))?;
         }
     }
 
@@ -520,7 +521,7 @@ pub async fn stream_chat(
             &char_id,
         )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| KokoroError::Chat(e.to_string()))?;
 
     let mut client_messages: Vec<crate::llm::openai::Message> = prompt_messages
         .into_iter()
@@ -615,7 +616,8 @@ pub async fn stream_chat(
 
         let mut stream = chat_provider
             .chat_stream(client_messages.clone(), None)
-            .await?;
+            .await
+            .map_err(KokoroError::Chat)?;
 
         let mut round_response = String::new();
         let mut emit_buffer = String::new();
@@ -633,12 +635,12 @@ pub async fn stream_chat(
                         emit_buffer = emit_buffer[safe..].to_string();
                         app
                             .emit("chat-delta", &to_emit)
-                            .map_err(|e| e.to_string())?;
+                            .map_err(|e| KokoroError::Chat(e.to_string()))?;
                     }
                 }
                 Err(e) => {
                     if round_response.is_empty() && emit_buffer.is_empty() {
-                        app.emit("chat-error", e).map_err(|e| e.to_string())?;
+                        app.emit("chat-error", e).map_err(|e| KokoroError::Chat(e.to_string()))?;
                     } else {
                         eprintln!(
                             "[Chat] Ignoring trailing stream error after partial response: {}",
@@ -657,7 +659,7 @@ pub async fn stream_chat(
             if !cleaned_remainder.is_empty() {
                 app
                     .emit("chat-delta", &cleaned_remainder)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| KokoroError::Chat(e.to_string()))?;
             }
         }
 
@@ -1011,7 +1013,7 @@ pub async fn stream_chat(
         });
     }
 
-    app.emit("chat-done", ()).map_err(|e| e.to_string())?;
+    app.emit("chat-done", ()).map_err(|e| KokoroError::Chat(e.to_string()))?;
 
     Ok(())
 }

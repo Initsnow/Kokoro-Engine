@@ -1,4 +1,5 @@
 use crate::ai::context::AIOrchestrator;
+use crate::error::KokoroError;
 use serde::Deserialize;
 use tauri::State;
 
@@ -25,7 +26,7 @@ pub struct ListMemoriesResponse {
 pub async fn list_memories(
     request: ListMemoriesRequest,
     state: State<'_, AIOrchestrator>,
-) -> Result<ListMemoriesResponse, String> {
+) -> Result<ListMemoriesResponse, KokoroError> {
     println!(
         "[Memory] list_memories called for character_id='{}', limit={}, offset={}",
         request.character_id, request.limit, request.offset
@@ -34,13 +35,13 @@ pub async fn list_memories(
         .memory_manager
         .list_memories(&request.character_id, request.limit, request.offset)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| KokoroError::Database(e.to_string()))?;
 
     let total = state
         .memory_manager
         .count_memories(&request.character_id)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| KokoroError::Database(e.to_string()))?;
 
     Ok(ListMemoriesResponse { memories, total })
 }
@@ -56,12 +57,12 @@ pub struct UpdateMemoryRequest {
 pub async fn update_memory(
     request: UpdateMemoryRequest,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     state
         .memory_manager
         .update_memory(request.id, &request.content, request.importance)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| KokoroError::Database(e.to_string()))
 }
 
 #[derive(Deserialize)]
@@ -73,12 +74,12 @@ pub struct DeleteMemoryRequest {
 pub async fn delete_memory(
     request: DeleteMemoryRequest,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     state
         .memory_manager
         .delete_memory(request.id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| KokoroError::Database(e.to_string()))
 }
 
 #[derive(Deserialize)]
@@ -91,13 +92,13 @@ pub struct UpdateMemoryTierRequest {
 pub async fn update_memory_tier(
     request: UpdateMemoryTierRequest,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     if request.tier != "core" && request.tier != "ephemeral" {
-        return Err("tier must be 'core' or 'ephemeral'".to_string());
+        return Err(KokoroError::Validation("tier must be 'core' or 'ephemeral'".to_string()));
     }
     state
         .memory_manager
         .update_memory_tier(request.id, &request.tier)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| KokoroError::Database(e.to_string()))
 }

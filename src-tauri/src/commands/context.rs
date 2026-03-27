@@ -1,4 +1,5 @@
 use crate::ai::context::AIOrchestrator;
+use crate::error::KokoroError;
 use crate::llm::openai::{Message as LLMMessage, MessageContent, OpenAIClient};
 use tauri::State;
 
@@ -23,7 +24,7 @@ pub struct EmotionStateResponse {
 #[tauri::command]
 pub async fn get_emotion_state(
     state: State<'_, AIOrchestrator>,
-) -> Result<EmotionStateResponse, String> {
+) -> Result<EmotionStateResponse, KokoroError> {
     let emotion = state.emotion_state.lock().await;
     Ok(EmotionStateResponse {
         emotion: emotion.current_emotion().to_string(),
@@ -32,26 +33,26 @@ pub async fn get_emotion_state(
 }
 
 #[tauri::command]
-pub async fn set_persona(prompt: String, state: State<'_, AIOrchestrator>) -> Result<(), String> {
+pub async fn set_persona(prompt: String, state: State<'_, AIOrchestrator>) -> Result<(), KokoroError> {
     state.set_system_prompt(prompt).await;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn set_character_name(name: String, state: State<'_, AIOrchestrator>) -> Result<(), String> {
+pub async fn set_character_name(name: String, state: State<'_, AIOrchestrator>) -> Result<(), KokoroError> {
     state.set_character_name(name).await;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn set_active_character_id(id: String, state: State<'_, AIOrchestrator>) -> Result<(), String> {
+pub async fn set_active_character_id(id: String, state: State<'_, AIOrchestrator>) -> Result<(), KokoroError> {
     state.set_character_id(id.clone()).await;
     crate::ai::context::AIOrchestrator::persist_active_character_id(&id);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn set_user_name(name: String, state: State<'_, AIOrchestrator>) -> Result<(), String> {
+pub async fn set_user_name(name: String, state: State<'_, AIOrchestrator>) -> Result<(), KokoroError> {
     state.set_user_name(name).await;
     Ok(())
 }
@@ -60,7 +61,7 @@ pub async fn set_user_name(name: String, state: State<'_, AIOrchestrator>) -> Re
 pub async fn set_response_language(
     language: String,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     state.set_response_language(language).await;
     Ok(())
 }
@@ -69,7 +70,7 @@ pub async fn set_response_language(
 pub async fn set_user_language(
     language: String,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     state.set_user_language(language).await;
     Ok(())
 }
@@ -78,7 +79,7 @@ pub async fn set_user_language(
 pub async fn set_jailbreak_prompt(
     prompt: String,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     state.set_jailbreak_prompt(prompt.clone()).await;
 
     // Persist to disk
@@ -94,7 +95,7 @@ pub async fn set_jailbreak_prompt(
 #[tauri::command]
 pub async fn get_jailbreak_prompt(
     state: State<'_, AIOrchestrator>,
-) -> Result<String, String> {
+) -> Result<String, KokoroError> {
     Ok(state.get_jailbreak_prompt().await)
 }
 
@@ -102,7 +103,7 @@ pub async fn get_jailbreak_prompt(
 pub async fn set_proactive_enabled(
     enabled: bool,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     state.set_proactive_enabled(enabled);
     println!("[AI] Proactive messages {}", if enabled { "enabled" } else { "disabled" });
 
@@ -118,7 +119,7 @@ pub async fn set_proactive_enabled(
 #[tauri::command]
 pub async fn get_proactive_enabled(
     state: State<'_, AIOrchestrator>,
-) -> Result<bool, String> {
+) -> Result<bool, KokoroError> {
     Ok(state.is_proactive_enabled())
 }
 
@@ -126,24 +127,25 @@ pub async fn get_proactive_enabled(
 pub async fn set_memory_enabled(
     enabled: bool,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     state.set_memory_enabled(enabled).await;
     crate::config::save_json_config(
         &memory_config_path(),
         &MemorySystemConfig { enabled },
         "MEMORY",
     )
+    .map_err(KokoroError::Config)
 }
 
 #[tauri::command]
 pub async fn get_memory_enabled(
     state: State<'_, AIOrchestrator>,
-) -> Result<bool, String> {
+) -> Result<bool, KokoroError> {
     Ok(state.is_memory_enabled())
 }
 
 #[tauri::command]
-pub async fn clear_history(state: State<'_, AIOrchestrator>) -> Result<(), String> {
+pub async fn clear_history(state: State<'_, AIOrchestrator>) -> Result<(), KokoroError> {
     state.clear_history().await;
     Ok(())
 }
@@ -152,7 +154,7 @@ pub async fn clear_history(state: State<'_, AIOrchestrator>) -> Result<(), Strin
 pub async fn delete_last_messages(
     count: usize,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     let mut history = state.history.lock().await;
     let current_len = history.len();
     let to_remove = count.min(current_len);
@@ -174,7 +176,7 @@ pub async fn delete_last_messages(
         .bind(&conversation_id)
         .fetch_all(&state.db)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| KokoroError::Database(e.to_string()))?;
 
         // 删除最后 to_remove 条消息
         if message_ids.len() >= to_remove {
@@ -184,7 +186,7 @@ pub async fn delete_last_messages(
                     .bind(id)
                     .execute(&state.db)
                     .await
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| KokoroError::Database(e.to_string()))?;
             }
             println!("[AI] Deleted {} message(s) from database", to_remove);
         }
@@ -206,7 +208,7 @@ pub struct EndSessionRequest {
 pub async fn end_session(
     request: EndSessionRequest,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     if !state.is_memory_enabled() {
         state.clear_history().await;
         return Ok(());

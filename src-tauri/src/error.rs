@@ -37,6 +37,12 @@ pub enum KokoroError {
 
     #[error("内部错误: {0}")]
     Internal(String),
+
+    #[error("聊天错误: {0}")]
+    Chat(String),
+
+    #[error("校验错误: {0}")]
+    Validation(String),
 }
 
 /// 便捷类型别名

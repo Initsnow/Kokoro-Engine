@@ -1,4 +1,5 @@
 use crate::ai::context::AIOrchestrator;
+use crate::error::KokoroError;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -28,14 +29,14 @@ pub struct ListConversationsRequest {
 pub async fn list_conversations(
     request: ListConversationsRequest,
     state: State<'_, AIOrchestrator>,
-) -> Result<Vec<ConversationInfo>, String> {
+) -> Result<Vec<ConversationInfo>, KokoroError> {
     let rows = sqlx::query_as::<_, (String, String, String, String, String)>(
         "SELECT id, character_id, title, created_at, updated_at FROM conversations WHERE character_id = ? ORDER BY updated_at DESC"
     )
     .bind(&request.character_id)
     .fetch_all(&state.db)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| KokoroError::Database(e.to_string()))?;
 
     Ok(rows
         .into_iter()
@@ -58,14 +59,14 @@ pub struct LoadConversationRequest {
 pub async fn load_conversation(
     request: LoadConversationRequest,
     state: State<'_, AIOrchestrator>,
-) -> Result<Vec<ConversationMessage>, String> {
+) -> Result<Vec<ConversationMessage>, KokoroError> {
     let rows = sqlx::query_as::<_, (String, String, Option<String>, String)>(
         "SELECT role, content, metadata, created_at FROM conversation_messages WHERE conversation_id = ? ORDER BY id ASC"
     )
     .bind(&request.id)
     .fetch_all(&state.db)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| KokoroError::Database(e.to_string()))?;
 
     // 恢复到内存 history
     {
@@ -107,19 +108,19 @@ pub struct DeleteConversationRequest {
 pub async fn delete_conversation(
     request: DeleteConversationRequest,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     // 先删消息，再删对话
     sqlx::query("DELETE FROM conversation_messages WHERE conversation_id = ?")
         .bind(&request.id)
         .execute(&state.db)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| KokoroError::Database(e.to_string()))?;
 
     sqlx::query("DELETE FROM conversations WHERE id = ?")
         .bind(&request.id)
         .execute(&state.db)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| KokoroError::Database(e.to_string()))?;
 
     // 如果删除的是当前活跃对话，清空引用
     {
@@ -135,7 +136,7 @@ pub async fn delete_conversation(
 #[tauri::command]
 pub async fn list_character_ids(
     state: State<'_, AIOrchestrator>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, KokoroError> {
     let rows = sqlx::query_as::<_, (String,)>(
         "SELECT DISTINCT character_id FROM conversations
          UNION
@@ -144,7 +145,7 @@ pub async fn list_character_ids(
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| KokoroError::Database(e.to_string()))?;
 
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
@@ -152,7 +153,7 @@ pub async fn list_character_ids(
 #[tauri::command]
 pub async fn create_conversation(
     state: State<'_, AIOrchestrator>,
-) -> Result<String, String> {
+) -> Result<String, KokoroError> {
     // 清空内存 history
     state.clear_history().await;
 
@@ -171,13 +172,13 @@ pub struct RenameConversationRequest {
 pub async fn rename_conversation(
     request: RenameConversationRequest,
     state: State<'_, AIOrchestrator>,
-) -> Result<(), String> {
+) -> Result<(), KokoroError> {
     sqlx::query("UPDATE conversations SET title = ? WHERE id = ?")
         .bind(&request.title)
         .bind(&request.id)
         .execute(&state.db)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| KokoroError::Database(e.to_string()))?;
 
     Ok(())
 }
