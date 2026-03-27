@@ -136,6 +136,18 @@ npm run tauri dev
 npm run tauri build
 ```
 
+### 方法3：Nix / Flakes を使用する（Linux のみ）
+
+NixOS または Flakes が有効な Linux 環境で開発している場合、リポジトリ内蔵の flake を使って依存環境を一括セットアップできます：
+
+```bash
+nix develop
+npm install
+npm run tauri dev
+```
+
+> 事前に Nix Flakes を有効にする必要があります。`nix build` / `nix run` および NixOS/Home Manager での宣言的インストール方法は [docs/nix.md](docs/nix.md) を参照してください。
+
 ## 🤝 貢献 (Contributing)
 
 **Kokoro Engine** はコミュニティからの貢献を大歓迎します！

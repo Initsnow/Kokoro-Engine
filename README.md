@@ -136,15 +136,17 @@ npm run tauri dev
 npm run tauri build
 ```
 
-### 方式三：使用 Nix / Flakes
+### 方式三：使用 Nix / Flakes（仅 Linux）
 
-如果你在 NixOS 或其他启用了 Flakes 的 Linux 环境中开发/运行，可以直接使用仓库内置的 flake。
+如果你在 NixOS 或其他启用了 Flakes 的 Linux 环境中开发，可以使用仓库内置的 flake 一键配置依赖环境：
 
 ```bash
 nix develop
+npm install
+npm run tauri dev
 ```
 
-NixOS/Home Manager 中声明式安装，或 `nix build` / `nix run` 的用法见 [docs/nix.md](docs/nix.md)。
+> 需要先启用 Nix Flakes。`nix build` / `nix run` 及 NixOS/Home Manager 声明式安装方式见 [docs/nix.md](docs/nix.md)。
 
 ## 🤝 参与贡献 (Contributing)
  
