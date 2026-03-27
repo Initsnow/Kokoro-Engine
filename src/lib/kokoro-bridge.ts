@@ -1001,3 +1001,66 @@ export async function saveAutoBackupConfig(config: AutoBackupConfig): Promise<vo
 export async function runAutoBackupNow(): Promise<string> {
     return invoke<string>("run_auto_backup_now");
 }
+
+// ── Error Handling ──────────────────────────────────
+
+/**
+ * 结构化错误对象，对应后端 KokoroError
+ */
+export interface KokoroErrorObject {
+    code: "Config" | "Database" | "Llm" | "Tts" | "Stt" | "Io" | "ExternalService" | "Mod" | "NotFound" | "Unauthorized" | "Internal";
+    message: string;
+}
+
+/**
+ * 解析 Kokoro 错误，支持结构化 JSON 和裸字符串两种格式
+ *
+ * @param error - 来自后端的错误（可能是 JSON 字符串或裸字符串）
+ * @returns 结构化错误对象或原始错误字符串
+ */
+export function parseKokoroError(error: unknown): KokoroErrorObject | string {
+    if (typeof error !== "string") {
+        return "未知错误";
+    }
+
+    try {
+        const parsed = JSON.parse(error);
+        if (parsed.code && parsed.message) {
+            return parsed as KokoroErrorObject;
+        }
+    } catch {
+        // 不是 JSON，返回原始字符串
+    }
+
+    return error;
+}
+
+/**
+ * 安全的 invoke 包装，自动处理错误解析
+ *
+ * @param cmd - 命令名称
+ * @param args - 命令参数
+ * @returns Promise，错误时拒绝并包含结构化错误信息
+ */
+export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+    try {
+        return await invoke<T>(cmd, args);
+    } catch (error) {
+        const parsed = parseKokoroError(error);
+        throw parsed;
+    }
+}
+
+/**
+ * 检查错误是否为特定类型
+ *
+ * @param error - 错误对象
+ * @param code - 要检查的错误代码
+ * @returns 是否匹配
+ */
+export function isKokoroErrorCode(error: unknown, code: string): boolean {
+    if (typeof error === "object" && error !== null && "code" in error) {
+        return (error as KokoroErrorObject).code === code;
+    }
+    return false;
+}
