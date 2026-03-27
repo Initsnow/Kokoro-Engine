@@ -1020,7 +1020,8 @@ export interface KokoroErrorObject {
  */
 export function parseKokoroError(error: unknown): KokoroErrorObject | string {
     if (typeof error !== "string") {
-        return "未知错误";
+        if (error instanceof Error) return error.message;
+        return String(error);
     }
 
     try {
@@ -1052,13 +1053,16 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
 }
 
 /**
- * 检查错误是否为特定类型
+ * 检查错误是否为特定类型（TypeScript 类型收窄谓词）
  *
  * @param error - 错误对象
- * @param code - 要检查的错误代码
- * @returns 是否匹配
+ * @param code - 要检查的错误代码（限定为合法的 KokoroErrorObject["code"] 值）
+ * @returns 是否匹配，匹配时 error 被收窄为 KokoroErrorObject
  */
-export function isKokoroErrorCode(error: unknown, code: string): boolean {
+export function isKokoroErrorCode(
+    error: unknown,
+    code: KokoroErrorObject["code"]
+): error is KokoroErrorObject {
     if (typeof error === "object" && error !== null && "code" in error) {
         return (error as KokoroErrorObject).code === code;
     }

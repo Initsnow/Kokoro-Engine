@@ -42,7 +42,10 @@ pub enum KokoroError {
 /// 便捷类型别名
 pub type KokoroResult<T> = Result<T, KokoroError>;
 
-/// 向后兼容：序列化为 JSON 字符串，未迁移模块的 .map_err(|e| e.to_string()) 仍可用
+/// 将 KokoroError 序列化为 JSON 字符串，供 Tauri IPC 返回 Result<T, String> 使用。
+///
+/// 注意：`.to_string()` 调用 Display，输出人类可读字符串（如 "配置错误: ..."），不是 JSON。
+/// 迁移模块时应使用 `.map_err(Into::into)` 或 `String::from(e)` 以获得结构化 JSON 输出。
 impl From<KokoroError> for String {
     fn from(e: KokoroError) -> String {
         serde_json::to_string(&e).unwrap_or_else(|_| e.to_string())
@@ -74,5 +77,19 @@ impl From<sqlx::Error> for KokoroError {
 impl From<anyhow::Error> for KokoroError {
     fn from(e: anyhow::Error) -> Self {
         KokoroError::Internal(e.to_string())
+    }
+}
+
+/// 自动转换 reqwest::Error（HTTP 请求失败）
+impl From<reqwest::Error> for KokoroError {
+    fn from(e: reqwest::Error) -> Self {
+        KokoroError::ExternalService(e.to_string())
+    }
+}
+
+/// 自动转换 zip::result::ZipError（ZIP 解压失败）
+impl From<zip::result::ZipError> for KokoroError {
+    fn from(e: zip::result::ZipError) -> Self {
+        KokoroError::Io(e.to_string())
     }
 }
