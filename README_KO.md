@@ -136,6 +136,18 @@ npm run tauri dev
 npm run tauri build
 ```
 
+### 방법 3: Nix / Flakes 사용 (Linux 전용)
+
+NixOS 또는 Flakes가 활성화된 Linux 환경에서 개발하는 경우, 저장소에 내장된 flake를 사용해 의존성 환경을 한 번에 구성할 수 있습니다:
+
+```bash
+nix develop
+npm install
+npm run tauri dev
+```
+
+> 먼저 Nix Flakes를 활성화해야 합니다. `nix build` / `nix run` 및 NixOS/Home Manager 선언적 설치 방법은 [docs/nix.md](docs/nix.md)를 참고하세요.
+
 ## 🤝 기여 (Contributing)
 
 **Kokoro Engine**은 커뮤니티의 기여를 적극 환영합니다!

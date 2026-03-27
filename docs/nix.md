@@ -1,8 +1,8 @@
 # Nix
 
-## 启用 Flakes
+## Enabling Flakes
 
-NixOS:
+On NixOS:
 
 ```nix
 {
@@ -10,19 +10,19 @@ NixOS:
 }
 ```
 
-应用配置：
+Apply the configuration:
 
 ```bash
 sudo nixos-rebuild switch
 ```
 
-非 NixOS 临时启用：
+On non-NixOS systems, enable temporarily:
 
 ```bash
 nix --extra-experimental-features "nix-command flakes" develop
 ```
 
-## 开发
+## Development
 
 ```bash
 nix develop
@@ -30,22 +30,22 @@ npm install
 npm run tauri dev
 ```
 
-## 构建
+## Build
 
 ```bash
 nix build .#default
 ./result/bin/tauri-appkokoro-engine
 ```
 
-也可以：
+Or run directly:
 
 ```bash
 nix run .#default
 ```
 
-## NixOS Flake 安装
+## NixOS Flake Installation
 
-先把仓库加到你的系统 flake 输入里：
+Add the repository to your system flake inputs:
 
 ```nix
 {
@@ -53,7 +53,7 @@ nix run .#default
 }
 ```
 
-然后在 `configuration.nix` 对应模块里安装：
+Then install it in your `configuration.nix` module:
 
 ```nix
 { pkgs, inputs, ... }:
@@ -64,7 +64,7 @@ nix run .#default
 }
 ```
 
-## Home Manager 安装
+## Home Manager Installation
 
 ```nix
 { pkgs, inputs, ... }:
@@ -75,7 +75,7 @@ nix run .#default
 }
 ```
 
-## 说明
+## Notes
 
-- 当前 flake 主要支持 Linux。
-- 包里已经带上 WebKitGTK、glib-networking、GStreamer 和 ONNX Runtime 相关运行时设置。
+- The flake currently supports Linux only.
+- The package includes runtime configuration for WebKitGTK, glib-networking, GStreamer, and ONNX Runtime.

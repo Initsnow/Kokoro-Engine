@@ -136,6 +136,18 @@ npm run tauri dev
 npm run tauri build
 ```
 
+### Option 3: Using Nix / Flakes (Linux only)
+
+If you are developing on NixOS or another Linux environment with Flakes enabled, you can use the built-in flake to set up the full dev environment in one step:
+
+```bash
+nix develop
+npm install
+npm run tauri dev
+```
+
+> Nix Flakes must be enabled first. For `nix build` / `nix run` and NixOS/Home Manager declarative installation, see [docs/nix.md](docs/nix.md).
+
 ## 🤝 Contributing
 
 **Kokoro Engine** extremely welcomes community contributions!
