@@ -764,16 +764,13 @@
     },
     "footer": {
         "emotions": {
-            "calm": "穏やか",
-            "happy": "嬉しい",
-            "excited": "ワクワク",
-            "smug": "ドヤ顔",
-            "shy": "恥ずかしい",
-            "thinking": "考え中",
-            "surprised": "驚き",
-            "worried": "心配",
-            "sad": "悲しい",
-            "angry": "怒り"
+            "neutral": "ニュートラル",
+            "joy": "喜び",
+            "love": "愛情",
+            "sadness": "悲しみ",
+            "anger": "怒り",
+            "fear": "恐れ",
+            "surprise": "驚き"
         },
         "mode": {
             "auto": "自動",

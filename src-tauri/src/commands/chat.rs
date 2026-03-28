@@ -6,7 +6,8 @@ use crate::error::KokoroError;
 use crate::imagegen::ImageGenService;
 use crate::llm::messages::{
     assistant_tool_calls_message, extract_message_text, replace_user_message_with_images,
-    role_text_message, system_message, tool_result_message, user_text_message,
+    history_message_to_chat_message, system_message, tool_result_message,
+    user_text_message,
 };
 use crate::llm::provider::LlmStreamEvent;
 use crate::llm::service::LlmService;
@@ -98,8 +99,8 @@ fn debug_log_llm_messages(label: &str, messages: &[async_openai::types::chat::Ch
         };
         let text = extract_message_text(message);
         let compact = text.replace('\n', "\\n");
-        let preview = if compact.len() > 300 {
-            format!("{}...", &compact[..300])
+        let preview = if compact.chars().count() > 300 {
+            format!("{}...", compact.chars().take(300).collect::<String>())
         } else {
             compact
         };
@@ -163,6 +164,44 @@ fn strip_translate_tags(text: &str) -> String {
         }
     }
     result.trim().to_string()
+}
+
+fn merge_continuation_text(accumulated: &mut String, next: &str) {
+    if next.is_empty() {
+        return;
+    }
+    if accumulated.is_empty() {
+        accumulated.push_str(next);
+        return;
+    }
+    if next.starts_with(accumulated.as_str()) {
+        *accumulated = next.to_string();
+        return;
+    }
+    if accumulated.ends_with(next) {
+        return;
+    }
+
+    let mut overlap = 0usize;
+    let max_overlap = accumulated.len().min(next.len());
+    for candidate in (1..=max_overlap).rev() {
+        if accumulated.is_char_boundary(accumulated.len() - candidate)
+            && next.is_char_boundary(candidate)
+            && accumulated[accumulated.len() - candidate..] == next[..candidate]
+        {
+            overlap = candidate;
+            break;
+        }
+    }
+
+    if overlap > 0 {
+        accumulated.push_str(&next[overlap..]);
+    } else {
+        if !accumulated.ends_with(char::is_whitespace) && !next.starts_with(char::is_whitespace) {
+            accumulated.push(' ');
+        }
+        accumulated.push_str(next);
+    }
 }
 
 /// Extract the content inside `[TRANSLATE:...]` tags, then strip them from text.
@@ -374,12 +413,14 @@ pub async fn stream_chat(
     // Record user activity
     state.touch_activity().await;
 
-    // Sentiment analysis
-    let user_sentiment = crate::ai::sentiment::analyze(&request.message);
-    if user_sentiment.confidence > 0.2 {
-        let mut emotion = state.emotion_state.lock().await;
-        emotion.absorb_user_sentiment(user_sentiment.mood, user_sentiment.confidence);
-    }
+    // Emotion update
+    let emotion_classification = crate::ai::emotion_classifier::classify_text(&request.message).await;
+    state
+        .update_emotion(
+            &emotion_classification.label,
+            emotion_classification.raw_mood,
+        )
+        .await;
 
     // Typing simulation
     {
@@ -408,24 +449,6 @@ pub async fn stream_chat(
 
     // ── EXECUTION & STATE UPDATE ────────────────────────────────
 
-    // 1. Get current high-level emotion state for dialogue context.
-    // Live2D playback itself is driven by cue events.
-    let (current_emotion, _current_mood) = {
-        let emotion_state = state.emotion_state.lock().await;
-        (emotion_state.current_emotion().to_string(), emotion_state.mood())
-    };
-
-    // 2. Cue playback is driven by play_cue tool calls or fallback cue analysis below.
-
-    // Prepare System Feedback for Persona
-    let system_feedback = format!(
-        "(Internal System Note)\n\
-        - State Updated: Emotion is now '{}'.\n\
-        - Visual playback is cue-driven for the active model.\n\
-        Continue the dialogue naturally based on this state. Do NOT explicitly mention the system update.",
-        current_emotion,
-    );
-
     // ── LAYER 3: PERSONA GENERATION ─────────────────────────────
 
     let llm_config = llm_state.config().await;
@@ -441,11 +464,12 @@ pub async fn stream_chat(
         llm_config.active_provider, native_tools_enabled
     );
 
-    // Generate tool prompt from action registry
+    // Native tool-calling requests already carry structured tool definitions,
+    // so avoid duplicating a long textual tool prompt there.
     let tool_prompt = {
         let registry = _action_registry.read().await;
         let prompt = if native_tools_enabled {
-            registry.generate_native_tool_prompt_for_prompt(state.is_memory_enabled())
+            String::new()
         } else {
             registry.generate_tool_prompt_for_prompt(state.is_memory_enabled())
         };
@@ -471,7 +495,7 @@ pub async fn stream_chat(
 
     let mut client_messages = prompt_messages
         .into_iter()
-        .map(|m| role_text_message(&m.role, m.content))
+        .map(|m| history_message_to_chat_message(&m.role, m.content, m.metadata.as_ref()))
         .collect::<Result<Vec<_>, _>>()?;
 
     // 注入视觉上下文（如果有最近的屏幕观察）
@@ -533,10 +557,6 @@ pub async fn stream_chat(
     if request.hidden {
         client_messages.push(user_text_message(request.message.clone()));
     }
-
-    // Inject System Feedback (Before the last user message or as system at end)
-    // Best practice: System instruction near end of context
-    client_messages.push(system_message(system_feedback));
 
     #[cfg(debug_assertions)]
     {
@@ -638,12 +658,7 @@ pub async fn stream_chat(
         }
 
         // Accumulate cleaned text for history
-        if !cleaned_text.is_empty() {
-            if !all_cleaned_text.is_empty() {
-                all_cleaned_text.push(' ');
-            }
-            all_cleaned_text.push_str(&cleaned_text);
-        }
+        merge_continuation_text(&mut all_cleaned_text, &cleaned_text);
 
         // Persist assistant draft incrementally (hidden interactions still save the response, just not the user message)
         if !all_cleaned_text.is_empty() {
@@ -745,6 +760,45 @@ pub async fn stream_chat(
         drop(registry);
 
         if has_native_tool_calls {
+            let assistant_tool_call_metadata = serde_json::json!({
+                "type": "assistant_tool_calls",
+                "tool_calls": continuation_tool_calls
+                    .iter()
+                    .map(|(id, name, arguments)| serde_json::json!({
+                        "id": id,
+                        "name": name,
+                        "arguments": arguments,
+                    }))
+                    .collect::<Vec<_>>(),
+            })
+            .to_string();
+            state
+                .add_message_with_metadata(
+                    "assistant".to_string(),
+                    String::new(),
+                    Some(assistant_tool_call_metadata),
+                    &char_id,
+                )
+                .await;
+            for (index, tool_message) in tool_result_messages.iter().enumerate() {
+                if let Some(tool_call_id) = &tool_calls[index].tool_call_id {
+                    let tool_content = extract_message_text(tool_message);
+                    let tool_metadata = serde_json::json!({
+                        "type": "tool_result",
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_calls[index].name,
+                    })
+                    .to_string();
+                    state
+                        .add_message_with_metadata(
+                            "tool".to_string(),
+                            tool_content,
+                            Some(tool_metadata),
+                            &char_id,
+                        )
+                        .await;
+                }
+            }
             client_messages.push(assistant_tool_calls_message(
                 if cleaned_text.is_empty() {
                     None

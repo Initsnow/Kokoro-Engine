@@ -764,16 +764,13 @@
     },
     "footer": {
         "emotions": {
-            "calm": "平静",
-            "happy": "开心",
-            "excited": "兴奋",
-            "smug": "得意",
-            "shy": "害羞",
-            "thinking": "思考",
-            "surprised": "惊讶",
-            "worried": "担心",
-            "sad": "悲伤",
-            "angry": "生气"
+            "neutral": "中性",
+            "joy": "喜悦",
+            "love": "喜爱",
+            "sadness": "悲伤",
+            "anger": "愤怒",
+            "fear": "恐惧",
+            "surprise": "惊讶"
         },
         "mode": {
             "auto": "自动",

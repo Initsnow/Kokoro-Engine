@@ -23,6 +23,58 @@ pub fn role_text_message(
     }
 }
 
+pub fn history_message_to_chat_message(
+    role: &str,
+    content: impl Into<String>,
+    metadata: Option<&serde_json::Value>,
+) -> Result<ChatCompletionRequestMessage, String> {
+    let content = content.into();
+
+    if role == "tool" {
+        let tool_call_id = metadata
+            .and_then(|meta| meta.get("tool_call_id"))
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "Tool history message missing tool_call_id".to_string())?;
+        return Ok(tool_result_message(tool_call_id.to_string(), content));
+    }
+
+    if role == "assistant"
+        && metadata
+            .and_then(|meta| meta.get("type"))
+            .and_then(|value| value.as_str())
+            == Some("assistant_tool_calls")
+    {
+        let tool_calls = metadata
+            .and_then(|meta| meta.get("tool_calls"))
+            .and_then(|value| value.as_array())
+            .ok_or_else(|| "Assistant tool-call history missing tool_calls".to_string())?
+            .iter()
+            .map(|tool_call| {
+                let id = tool_call
+                    .get("id")
+                    .and_then(|value| value.as_str())
+                    .ok_or_else(|| "Tool call history missing id".to_string())?;
+                let name = tool_call
+                    .get("name")
+                    .and_then(|value| value.as_str())
+                    .ok_or_else(|| "Tool call history missing name".to_string())?;
+                let arguments = tool_call
+                    .get("arguments")
+                    .and_then(|value| value.as_str())
+                    .ok_or_else(|| "Tool call history missing arguments".to_string())?;
+                Ok((id.to_string(), name.to_string(), arguments.to_string()))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+
+        return Ok(assistant_tool_calls_message(
+            None,
+            tool_calls,
+        ));
+    }
+
+    role_text_message(role, content)
+}
+
 pub fn system_message(text: impl Into<String>) -> ChatCompletionRequestMessage {
     let message = ChatCompletionRequestSystemMessageArgs::default()
         .content(text.into())

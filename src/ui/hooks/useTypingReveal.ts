@@ -32,7 +32,7 @@ const TYPO_NEIGHBORS: Record<string, string> = {
 };
 
 /** Emotions that can trigger correction behavior */
-const HESITANT_EMOTIONS = new Set(["shy", "worried", "nervous", "sad", "thinking"]);
+const HESITANT_EMOTIONS = new Set(["fear", "sadness", "love", "nervous"]);
 
 // ── Hook ──────────────────────────────────────────
 

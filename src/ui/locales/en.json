@@ -764,16 +764,13 @@
     },
     "footer": {
         "emotions": {
-            "calm": "Calm",
-            "happy": "Happy",
-            "excited": "Excited",
-            "smug": "Smug",
-            "shy": "Shy",
-            "thinking": "Thinking",
-            "surprised": "Surprised",
-            "worried": "Worried",
-            "sad": "Sad",
-            "angry": "Angry"
+            "neutral": "Neutral",
+            "joy": "Joy",
+            "love": "Love",
+            "sadness": "Sadness",
+            "anger": "Anger",
+            "fear": "Fear",
+            "surprise": "Surprise"
         },
         "mode": {
             "auto": "AUTO",

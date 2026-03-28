@@ -246,19 +246,21 @@ pub fn run() {
                                         *conv_id = Some(id.to_string());
                                     }
                                     // Reload messages into in-memory history so LLM has conversation context
-                                    if let Ok(rows) = sqlx::query_as::<_, (String, String)>(
-                                        "SELECT role, content FROM conversation_messages WHERE conversation_id = ? ORDER BY id ASC"
+                                    if let Ok(rows) = sqlx::query_as::<_, (String, String, Option<String>)>(
+                                        "SELECT role, content, metadata FROM conversation_messages WHERE conversation_id = ? ORDER BY id ASC"
                                     )
                                     .bind(id)
                                     .fetch_all(&orchestrator.db)
                                     .await {
                                         let mut history = orchestrator.history.lock().await;
                                         history.clear();
-                                        for (role, content) in &rows {
+                                        for (role, content, metadata) in &rows {
                                             history.push_back(crate::ai::context::Message {
                                                 role: role.clone(),
                                                 content: content.clone(),
-                                                metadata: None,
+                                                metadata: metadata
+                                                    .as_deref()
+                                                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok()),
                                             });
                                         }
                                         println!("[AI] Restored current_conversation_id: {} ({} messages)", id, rows.len());

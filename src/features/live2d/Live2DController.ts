@@ -320,7 +320,6 @@ export class Live2DController {
     }
 
     private playIdleMotion() {
-        this.resetExpressionToDefault();
         const availableGroups = this.getAvailableMotionGroups();
         if (availableGroups.includes("Idle")) {
             void this.playMotionGroupByName("Idle", undefined, MOTION_PRIORITY.IDLE);
@@ -381,19 +380,6 @@ export class Live2DController {
 
         return [];
     }
-
-    private resetExpressionToDefault() {
-        if (!this.model) return;
-
-        try {
-            this.model.internalModel?.motionManager?.expressionManager?.resetExpression?.();
-            this.currentCue = null;
-            this.onCueChange?.(null);
-        } catch (error) {
-            console.warn("[Live2DController] Failed to reset expression to default:", error);
-        }
-    }
-
     public destroy() {
         audioPlayer.removeAmplitudeListener(this.amplitudeHandler);
     }

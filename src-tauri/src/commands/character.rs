@@ -59,7 +59,7 @@ pub async fn send_message(message: String) -> Result<ChatResponse, KokoroError> 
     }
     Ok(ChatResponse {
         text: format!("Echo from Kokoro Engine: {}", message),
-        cue: "happy".to_string(),
+        cue: "joy".to_string(),
         mood_delta: 0.1,
     })
 }

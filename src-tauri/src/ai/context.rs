@@ -168,6 +168,9 @@ impl AIOrchestrator {
     }
 
     pub async fn save_emotion_state(&self) -> Result<()> {
+        if !self.is_memory_enabled() {
+            return Ok(());
+        }
         let emotion = self.emotion_state.lock().await;
         let app_data = dirs_next::data_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -218,9 +221,11 @@ impl AIOrchestrator {
             emotion.update(raw_emotion, raw_mood)
         };
 
-        // Save emotion state to disk after update
-        if let Err(e) = self.save_emotion_state().await {
-            eprintln!("[AI] Failed to save emotion state: {}", e);
+        if self.is_memory_enabled() {
+            // Save emotion state to disk after update
+            if let Err(e) = self.save_emotion_state().await {
+                eprintln!("[AI] Failed to save emotion state: {}", e);
+            }
         }
 
         result
@@ -311,10 +316,13 @@ impl AIOrchestrator {
         let _ = self.persist_message(&role, &content, metadata.as_deref(), character_id).await;
 
         let mut history = self.history.lock().await;
+        let parsed_metadata = metadata
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
         history.push_back(Message {
             role: role.clone(),
             content: content.clone(),
-            metadata: None,
+            metadata: parsed_metadata,
         });
 
         // Rolling window: keep at most 30 messages
@@ -573,6 +581,17 @@ impl AIOrchestrator {
             let mut emotion = self.emotion_state.lock().await;
             let personality = emotion.personality().clone();
             emotion.set_personality_with_reset(personality, true);
+            drop(emotion);
+
+            let path = dirs_next::data_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("com.chyin.kokoro")
+                .join("emotion_state.json");
+            if path.exists() {
+                if let Err(e) = std::fs::remove_file(&path) {
+                    eprintln!("[AI] Failed to remove emotion state while disabling memory: {}", e);
+                }
+            }
         }
     }
 
@@ -678,7 +697,7 @@ impl AIOrchestrator {
 
         // -- Emotion Context (P0.25) --
         // Inject current emotional state so the LLM responds in character
-        let (emotion_desc, current_mood, current_emotion, mood_hist, _expressiveness) = {
+        let (emotion_desc, current_mood, _current_emotion, mood_hist, _expressiveness) = {
             let emotion = self.emotion_state.lock().await;
             (
                 emotion.describe(),
@@ -694,23 +713,7 @@ impl AIOrchestrator {
             metadata: Some(serde_json::json!({"type": "emotion_context"})),
         });
 
-        // -- Style Adaptation (P0.3) --
-        // Adjust speaking style based on relationship depth and mood
-        let conversation_count = self.get_conversation_count().await;
-        let style = crate::ai::style_adapter::compute_style(
-            conversation_count,
-            current_mood,
-            &current_emotion,
-        );
-        final_messages.push(Message {
-            role: "system".to_string(),
-            content: style.prompt_instruction,
-            metadata: Some(
-                serde_json::json!({"type": "style_directive", "tier": format!("{:?}", style.tier)}),
-            ),
-        });
-
-        // -- Emotion Events (P0.35) --
+        // -- Emotion Events (P0.3) --
         // Inject special behavior instructions when mood is extreme
         let emotion_events =
             crate::ai::emotion_events::check_emotion_triggers(current_mood, &mood_hist);
@@ -722,7 +725,7 @@ impl AIOrchestrator {
             });
         }
 
-        // -- Live2D Cue Context (P0.4) --
+        // -- Live2D Cue Context (P0.35) --
         if let Some(profile) = crate::commands::live2d::load_active_live2d_profile() {
             if !profile.cue_map.is_empty() {
                 let cue_lines = profile
@@ -736,6 +739,8 @@ impl AIOrchestrator {
                     content: format!(
                         "Live2D visual playback uses configured cues. Available cues for the active model: {}.\n\
                          If the current reply clearly fits one of these existing cues, call the play_cue tool at an appropriate moment.\n\
+                         When calling play_cue, the cue argument must be exactly one item from this list.\n\
+                         Never invent a new cue name from an emotion word or description.\n\
                          Do not rely only on text to describe expressions or actions when a matching cue should be used.",
                         cue_lines
                     ),
@@ -743,22 +748,6 @@ impl AIOrchestrator {
                 });
             }
 
-            if !profile.semantic_cue_map.is_empty() {
-                let semantic_lines = profile
-                    .semantic_cue_map
-                    .iter()
-                    .map(|(semantic_key, cue)| format!("- {} -> {}", semantic_key, cue))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                final_messages.push(Message {
-                    role: "system".to_string(),
-                    content: format!(
-                        "Configured semantic Live2D cue mappings for the active model:\n{}",
-                        semantic_lines
-                    ),
-                    metadata: Some(serde_json::json!({"type": "live2d_semantic_cue_context"})),
-                });
-            }
         }
 
         // -- Relevant Memories (P1) --

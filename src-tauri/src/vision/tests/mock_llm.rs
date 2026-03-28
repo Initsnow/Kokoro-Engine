@@ -1,4 +1,4 @@
-use crate::llm::messages::{assistant_text_message, extract_message_text, system_message, user_message_with_images};
+use crate::llm::messages::{extract_message_text, system_message, user_message_with_images};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
