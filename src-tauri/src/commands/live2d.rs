@@ -8,6 +8,8 @@ use std::path::PathBuf;
 use tauri::{Emitter, Manager};
 use zip::write::SimpleFileOptions;
 
+pub const BUILTIN_LIVE2D_MODEL_PATH: &str = "__builtin__/haru/haru_greeter_t03.model3.json";
+
 #[derive(Debug, Serialize)]
 pub struct Live2dModelInfo {
     /// Human-friendly name (top-level folder name)
@@ -481,6 +483,9 @@ fn discover_model_profile(
     model_path: &str,
 ) -> Result<Live2dModelProfile, String> {
     let normalized = normalize_relative_model_path(model_path)?;
+    if normalized == BUILTIN_LIVE2D_MODEL_PATH {
+        return Ok(builtin_haru_profile());
+    }
     let model_json_path = models_dir.join(&normalized);
     if !model_json_path.exists() {
         return Err(format!("Model '{}' not found", normalized));
@@ -583,12 +588,41 @@ fn profile_path_for_model(
     model_path: &str,
 ) -> Result<PathBuf, String> {
     let normalized = normalize_relative_model_path(model_path)?;
+    if normalized == BUILTIN_LIVE2D_MODEL_PATH {
+        return Ok(models_dir
+            .join("__builtin__")
+            .join("haru")
+            .join(".kokoro-live2d-profile.json"));
+    }
     let root = normalized
         .split('/')
         .next()
         .filter(|segment| !segment.is_empty())
         .ok_or_else(|| "Invalid model path".to_string())?;
     Ok(models_dir.join(root).join(".kokoro-live2d-profile.json"))
+}
+
+fn builtin_haru_profile() -> Live2dModelProfile {
+    Live2dModelProfile {
+        version: 3,
+        model_path: BUILTIN_LIVE2D_MODEL_PATH.to_string(),
+        available_expressions: vec![
+            "f00".to_string(),
+            "f01".to_string(),
+            "f02".to_string(),
+            "f03".to_string(),
+            "f04".to_string(),
+            "f05".to_string(),
+            "f06".to_string(),
+            "f07".to_string(),
+        ],
+        available_motion_groups: HashMap::from([
+            ("Idle".to_string(), 3usize),
+            ("Tap".to_string(), 2usize),
+        ]),
+        cue_map: HashMap::new(),
+        semantic_cue_map: HashMap::new(),
+    }
 }
 
 fn load_saved_model_profile(

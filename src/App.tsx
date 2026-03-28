@@ -132,6 +132,7 @@ import {
   deleteLive2dModel,
   importLive2dZip,
   setActiveLive2dModel,
+  BUILTIN_LIVE2D_MODEL_PATH,
   // New: Context
   setUserLanguage,
   // Types
@@ -185,12 +186,7 @@ function App() {
     () => localStorage.getItem("kokoro_gaze_tracking") !== "false"
   );
   const [renderFps, setRenderFps] = useState<number>(60);
-
-  useEffect(() => {
-    setActiveLive2dModel(customModelPath).catch((err) => {
-      console.error("[App] Failed to sync active Live2D model:", err);
-    });
-  }, [customModelPath]);
+  const activeLive2dModelPath = customModelPath ?? BUILTIN_LIVE2D_MODEL_PATH;
 
   const handleGazeTrackingChange = (enabled: boolean) => {
     setGazeTracking(enabled);
@@ -244,9 +240,22 @@ function App() {
     return "/live2d/haru/haru_greeter_t03.model3.json";
   }, [customModelPath]);
 
+  useEffect(() => {
+    setActiveLive2dModel(activeLive2dModelPath).catch((err) => {
+      console.error("[App] Failed to sync active Live2D model:", err);
+    });
+    emit("live2d-model-selection-updated", {
+      modelPath: activeLive2dModelPath,
+      customModelPath,
+      modelUrl,
+    }).catch((err) => {
+      console.error("[App] Failed to broadcast Live2D model selection:", err);
+    });
+  }, [activeLive2dModelPath, customModelPath, modelUrl]);
+
   const layout = useMemo(
-    () => createLayout({ mode: displayMode, modelUrl, modelPath: customModelPath, gazeTracking, renderFps }),
-    [displayMode, modelUrl, customModelPath, gazeTracking, renderFps]
+    () => createLayout({ mode: displayMode, modelUrl, modelPath: activeLive2dModelPath, gazeTracking, renderFps }),
+    [displayMode, modelUrl, activeLive2dModelPath, gazeTracking, renderFps]
   );
 
   const handleDisplayModeChange = (mode: Live2DDisplayMode) => {

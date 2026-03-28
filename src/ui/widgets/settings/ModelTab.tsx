@@ -15,6 +15,7 @@ import {
     getLive2dModelProfile,
     saveLive2dModelProfile,
     playCue,
+    BUILTIN_LIVE2D_MODEL_PATH,
 } from "../../../lib/kokoro-bridge";
 import type { Live2dCueBinding, Live2dModelInfo, Live2dModelProfile } from "../../../lib/kokoro-bridge";
 import type { Live2DDisplayMode } from "../../../features/live2d/Live2DViewer";
@@ -98,6 +99,7 @@ export default function ModelTab({
     const [interactionCue, setInteractionCue] = useState("");
     const [semanticKey, setSemanticKey] = useState<(typeof SEMANTIC_KEYS)[number]["value"]>("emotion:ecstatic");
     const [semanticCue, setSemanticCue] = useState("");
+    const effectiveModelPath = customModelPath ?? BUILTIN_LIVE2D_MODEL_PATH;
 
     // Fetch available models on mount
     useEffect(() => {
@@ -105,22 +107,8 @@ export default function ModelTab({
     }, []);
 
     useEffect(() => {
-        if (!customModelPath) {
-            setModelProfile(null);
-            setEditingCueKey(null);
-            setDraftCue("");
-            setDraftExpression("");
-            setDraftMotionGroup("");
-            setInteractionGesture("tap");
-            setInteractionArea("face");
-            setInteractionCue("");
-            setSemanticKey("emotion:ecstatic");
-            setSemanticCue("");
-            return;
-        }
-
         setIsProfileLoading(true);
-        getLive2dModelProfile(customModelPath)
+        getLive2dModelProfile(effectiveModelPath)
             .then((profile) => {
                 setModelProfile(profile);
             })
@@ -131,7 +119,7 @@ export default function ModelTab({
             .finally(() => {
                 setIsProfileLoading(false);
             });
-    }, [customModelPath]);
+    }, [effectiveModelPath]);
 
     const fetchModels = async () => {
         setIsLoadingModels(true);
@@ -690,17 +678,17 @@ export default function ModelTab({
                     </p>
                 </div>
 
-                {!customModelPath && (
+                {isProfileLoading && (
+                    <p className="text-sm text-[var(--color-text-muted)]">{t("settings.model.mapping.loading_profile")}</p>
+                )}
+
+                {!isProfileLoading && !modelProfile && (
                     <p className="text-sm text-[var(--color-text-muted)]">
                         {t("settings.model.mapping.select_model")}
                     </p>
                 )}
 
-                {customModelPath && isProfileLoading && (
-                    <p className="text-sm text-[var(--color-text-muted)]">{t("settings.model.mapping.loading_profile")}</p>
-                )}
-
-                {customModelPath && modelProfile && (
+                {modelProfile && (
                     <>
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                             <input
