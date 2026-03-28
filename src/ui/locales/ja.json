@@ -357,7 +357,9 @@
                     "save_cue": "Cue を保存",
                     "save_interaction": "インタラクションマッピングを保存",
                     "save_semantic": "意味イベントマッピングを保存",
-                    "clear": "クリア"
+                    "clear": "クリア",
+                    "exclude_from_prompt": "プロンプトから除外",
+                    "include_in_prompt": "プロンプトに含める"
                 },
                 "cues": {
                     "title": "Cue マッピング",
@@ -384,7 +386,14 @@
                     "expression_none": "表情: なし",
                     "motion": "モーション: {{value}}",
                     "motion_none": "モーション: なし",
-                    "cue": "cue: {{value}}"
+                    "cue": "cue: {{value}}",
+                    "prompt_hidden": "プロンプトから除外"
+                },
+                "prompt_exclusions": {
+                    "title": "プロンプト除外",
+                    "desc": "すべての cue はデフォルトでチャットモデルに公開されます。ここには除外したい cue だけを追加します。",
+                    "select_cue": "除外する cue を選択",
+                    "empty": "現在、プロンプトから除外されている cue はありません。"
                 },
                 "gestures": {
                     "tap": "タップ",

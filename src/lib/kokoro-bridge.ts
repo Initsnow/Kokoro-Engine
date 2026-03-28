@@ -388,6 +388,7 @@ export interface Live2dModelInfo {
 export interface Live2dCueBinding {
     expression?: string | null;
     motion_group?: string | null;
+    exclude_from_prompt?: boolean;
 }
 
 export const BUILTIN_LIVE2D_MODEL_PATH = "__builtin__/haru/haru_greeter_t03.model3.json";

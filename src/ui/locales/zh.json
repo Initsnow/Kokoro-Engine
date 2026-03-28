@@ -357,7 +357,9 @@
                     "save_cue": "保存 Cue",
                     "save_interaction": "保存交互映射",
                     "save_semantic": "保存语义映射",
-                    "clear": "清空"
+                    "clear": "清空",
+                    "exclude_from_prompt": "排除出提示词",
+                    "include_in_prompt": "加入提示词"
                 },
                 "cues": {
                     "title": "Cue 映射",
@@ -384,7 +386,14 @@
                     "expression_none": "表情: 无",
                     "motion": "动作: {{value}}",
                     "motion_none": "动作: 无",
-                    "cue": "cue: {{value}}"
+                    "cue": "cue: {{value}}",
+                    "prompt_hidden": "已从提示词排除"
+                },
+                "prompt_exclusions": {
+                    "title": "提示词排除",
+                    "desc": "默认所有 cue 都会暴露给聊天模型。这里只列出不希望进入模型提示词的 cue。",
+                    "select_cue": "选择要排除的 cue",
+                    "empty": "当前没有被排除的 cue。"
                 },
                 "gestures": {
                     "tap": "轻点",

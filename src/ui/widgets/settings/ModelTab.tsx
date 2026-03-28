@@ -94,6 +94,7 @@ export default function ModelTab({
     const [draftCue, setDraftCue] = useState("");
     const [draftExpression, setDraftExpression] = useState("");
     const [draftMotionGroup, setDraftMotionGroup] = useState("");
+    const [excludedPromptCue, setExcludedPromptCue] = useState("");
     const [interactionGesture, setInteractionGesture] = useState<(typeof INTERACTION_GESTURES)[number]["value"]>("tap");
     const [interactionArea, setInteractionArea] = useState<(typeof INTERACTION_AREAS)[number]["value"]>("face");
     const [interactionCue, setInteractionCue] = useState("");
@@ -268,6 +269,7 @@ export default function ModelTab({
             [cue]: {
                 expression: draftExpression || null,
                 motion_group: draftMotionGroup || null,
+                exclude_from_prompt: false,
             },
         };
 
@@ -294,6 +296,19 @@ export default function ModelTab({
         if (draftCue.trim() === cue) {
             resetCueDraft();
         }
+    };
+
+    const handleToggleCuePrompt = async (cue: string, excluded: boolean) => {
+        if (!modelProfile) return;
+        const binding = modelProfile.cue_map[cue];
+        if (!binding) return;
+        await persistCueMap({
+            ...modelProfile.cue_map,
+            [cue]: {
+                ...binding,
+                exclude_from_prompt: excluded,
+            },
+        });
     };
 
     const handlePreviewCue = async (cue: string) => {
@@ -401,6 +416,15 @@ export default function ModelTab({
         : [];
     const availableCueNames = modelProfile
         ? Object.keys(modelProfile.cue_map).sort((a, b) => a.localeCompare(b))
+        : [];
+    const excludedPromptCueNames = modelProfile
+        ? Object.entries(modelProfile.cue_map)
+            .filter(([, binding]) => binding.exclude_from_prompt)
+            .map(([cue]) => cue)
+            .sort((a, b) => a.localeCompare(b))
+        : [];
+    const includablePromptCueNames = modelProfile
+        ? availableCueNames.filter((cue) => !modelProfile.cue_map[cue]?.exclude_from_prompt)
         : [];
 
     return (
@@ -792,6 +816,7 @@ export default function ModelTab({
                                             {binding.expression ? t("settings.model.mapping.summary.expression", { value: binding.expression }) : t("settings.model.mapping.summary.expression_none")}
                                             {" · "}
                                             {binding.motion_group ? t("settings.model.mapping.summary.motion", { value: binding.motion_group }) : t("settings.model.mapping.summary.motion_none")}
+                                            {binding.exclude_from_prompt ? ` · ${t("settings.model.mapping.summary.prompt_hidden")}` : ""}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -816,6 +841,64 @@ export default function ModelTab({
                                     </div>
                                 </div>
                             ))}
+                        </div>
+
+                        <div className="space-y-3 rounded-lg border border-[var(--color-border)] p-3">
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                    {t("settings.model.mapping.prompt_exclusions.title")}
+                                </p>
+                                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                                    {t("settings.model.mapping.prompt_exclusions.desc")}
+                                </p>
+                            </div>
+
+                            <div className="flex flex-col gap-3 md:flex-row">
+                                <select
+                                    value={excludedPromptCue}
+                                    onChange={(e) => setExcludedPromptCue(e.target.value)}
+                                    className="flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface-soft)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none"
+                                >
+                                    <option value="">{t("settings.model.mapping.prompt_exclusions.select_cue")}</option>
+                                    {includablePromptCueNames.map((cue) => (
+                                        <option key={cue} value={cue}>{cue}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={async () => {
+                                        const cue = excludedPromptCue.trim();
+                                        if (!cue) return;
+                                        await handleToggleCuePrompt(cue, true);
+                                        setExcludedPromptCue("");
+                                    }}
+                                    disabled={!excludedPromptCue.trim()}
+                                    className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {t("settings.model.mapping.actions.exclude_from_prompt")}
+                                </button>
+                            </div>
+
+                            <div className="space-y-2">
+                                {excludedPromptCueNames.length === 0 && (
+                                    <p className="text-sm text-[var(--color-text-muted)]">
+                                        {t("settings.model.mapping.prompt_exclusions.empty")}
+                                    </p>
+                                )}
+                                {excludedPromptCueNames.map((cue) => (
+                                    <div
+                                        key={cue}
+                                        className="flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-black/10 px-3 py-2"
+                                    >
+                                        <span className="font-mono text-sm text-[var(--color-text-primary)]">{cue}</span>
+                                        <button
+                                            onClick={() => handleToggleCuePrompt(cue, false)}
+                                            className="rounded-md border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-text-secondary)]"
+                                        >
+                                            {t("settings.model.mapping.actions.include_in_prompt")}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
                         <div className="space-y-3 rounded-lg border border-[var(--color-border)] p-3">

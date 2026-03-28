@@ -24,6 +24,8 @@ pub struct Live2dCueBinding {
     pub expression: Option<String>,
     #[serde(default)]
     pub motion_group: Option<String>,
+    #[serde(default)]
+    pub exclude_from_prompt: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

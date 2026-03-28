@@ -357,7 +357,9 @@
                     "save_cue": "Save Cue",
                     "save_interaction": "Save Interaction Mapping",
                     "save_semantic": "Save Semantic Mapping",
-                    "clear": "Clear"
+                    "clear": "Clear",
+                    "exclude_from_prompt": "Hide From Prompt",
+                    "include_in_prompt": "Show In Prompt"
                 },
                 "cues": {
                     "title": "Cue Mapping",
@@ -384,7 +386,14 @@
                     "expression_none": "expr: none",
                     "motion": "motion: {{value}}",
                     "motion_none": "motion: none",
-                    "cue": "cue: {{value}}"
+                    "cue": "cue: {{value}}",
+                    "prompt_hidden": "hidden from prompt"
+                },
+                "prompt_exclusions": {
+                    "title": "Prompt Exclusions",
+                    "desc": "All cues are exposed to the chat model by default. List only the cues you want excluded here.",
+                    "select_cue": "Select cue to exclude",
+                    "empty": "No cues are excluded from the prompt."
                 },
                 "gestures": {
                     "tap": "Tap",

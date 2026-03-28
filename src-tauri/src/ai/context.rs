@@ -702,22 +702,24 @@ impl AIOrchestrator {
             if !profile.cue_map.is_empty() {
                 let cue_lines = profile
                     .cue_map
-                    .keys()
-                    .cloned()
+                    .iter()
+                    .filter_map(|(cue, binding)| (!binding.exclude_from_prompt).then_some(cue.clone()))
                     .collect::<Vec<_>>()
                     .join(", ");
-                final_messages.push(Message {
-                    role: "system".to_string(),
-                    content: format!(
-                        "Live2D visual playback uses configured cues. Available cues for the active model: {}.\n\
-                         If the current reply clearly fits one of these existing cues, call the play_cue tool at an appropriate moment.\n\
-                         When calling play_cue, the cue argument must be exactly one item from this list.\n\
-                         Never invent a new cue name from an emotion word or description.\n\
-                         Do not rely only on text to describe expressions or actions when a matching cue should be used.",
-                        cue_lines
-                    ),
-                    metadata: Some(serde_json::json!({"type": "live2d_cue_context"})),
-                });
+                if !cue_lines.is_empty() {
+                    final_messages.push(Message {
+                        role: "system".to_string(),
+                        content: format!(
+                            "Live2D visual playback uses configured cues. Available cues for the active model: {}.\n\
+                             If the current reply clearly fits one of these existing cues, call the play_cue tool at an appropriate moment.\n\
+                             When calling play_cue, the cue argument must be exactly one item from this list.\n\
+                             Never invent a new cue name from an emotion word or description.\n\
+                             Do not rely only on text to describe expressions or actions when a matching cue should be used.",
+                            cue_lines
+                        ),
+                        metadata: Some(serde_json::json!({"type": "live2d_cue_context"})),
+                    });
+                }
             }
 
         }

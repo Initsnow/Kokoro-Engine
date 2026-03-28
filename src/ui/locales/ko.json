@@ -357,7 +357,9 @@
                     "save_cue": "Cue 저장",
                     "save_interaction": "상호작용 매핑 저장",
                     "save_semantic": "시맨틱 매핑 저장",
-                    "clear": "지우기"
+                    "clear": "지우기",
+                    "exclude_from_prompt": "프롬프트에서 제외",
+                    "include_in_prompt": "프롬프트에 포함"
                 },
                 "cues": {
                     "title": "Cue 매핑",
@@ -384,7 +386,14 @@
                     "expression_none": "표정: 없음",
                     "motion": "모션: {{value}}",
                     "motion_none": "모션: 없음",
-                    "cue": "cue: {{value}}"
+                    "cue": "cue: {{value}}",
+                    "prompt_hidden": "프롬프트에서 숨김"
+                },
+                "prompt_exclusions": {
+                    "title": "프롬프트 제외",
+                    "desc": "모든 cue 는 기본적으로 채팅 모델에 노출됩니다. 여기에는 제외할 cue 만 추가합니다.",
+                    "select_cue": "제외할 cue 선택",
+                    "empty": "현재 프롬프트에서 제외된 cue 가 없습니다."
                 },
                 "gestures": {
                     "tap": "탭",
