@@ -237,24 +237,52 @@ export async function streamChat(request: ChatRequest): Promise<void> {
     return invoke("stream_chat", { request });
 }
 
-export async function onChatDelta(callback: (delta: string) => void): Promise<UnlistenFn> {
-    return listen<string>("chat-delta", (event) => callback(event.payload));
-}
-
 export async function onChatError(callback: (error: string) => void): Promise<UnlistenFn> {
     return listen<string>("chat-error", (event) => callback(event.payload));
 }
 
-export interface ChatDoneEvent {
-    text: string;
+export interface ChatTurnStartEvent {
+    turn_id: string;
 }
 
-export async function onChatDone(callback: (payload?: ChatDoneEvent) => void): Promise<UnlistenFn> {
-    return listen<ChatDoneEvent>("chat-done", (event) => callback(event.payload));
+export interface ChatTurnDeltaEvent {
+    turn_id: string;
+    delta: string;
 }
 
-export async function onChatTranslation(callback: (translation: string) => void): Promise<UnlistenFn> {
-    return listen<string>("chat-translation", (event) => callback(event.payload));
+export interface ChatTurnFinishEvent {
+    turn_id: string;
+    status: "completed" | "error";
+}
+
+export interface ChatTurnTranslationEvent {
+    turn_id: string;
+    translation: string;
+}
+
+export interface ChatTurnToolEvent {
+    turn_id: string;
+    tool: string;
+    result?: {
+        message: string;
+    };
+    error?: string;
+}
+
+export async function onChatTurnStart(callback: (event: ChatTurnStartEvent) => void): Promise<UnlistenFn> {
+    return listen<ChatTurnStartEvent>("chat-turn-start", (event) => callback(event.payload));
+}
+
+export async function onChatTurnDelta(callback: (event: ChatTurnDeltaEvent) => void): Promise<UnlistenFn> {
+    return listen<ChatTurnDeltaEvent>("chat-turn-delta", (event) => callback(event.payload));
+}
+
+export async function onChatTurnFinish(callback: (event: ChatTurnFinishEvent) => void): Promise<UnlistenFn> {
+    return listen<ChatTurnFinishEvent>("chat-turn-finish", (event) => callback(event.payload));
+}
+
+export async function onChatTurnTranslation(callback: (event: ChatTurnTranslationEvent) => void): Promise<UnlistenFn> {
+    return listen<ChatTurnTranslationEvent>("chat-turn-translation", (event) => callback(event.payload));
 }
 
 // ── Cue Events ─────────────────────────────────────
@@ -398,6 +426,7 @@ export interface Live2dModelProfile {
     model_path: string;
     available_expressions: string[];
     available_motion_groups: Record<string, number>;
+    available_hit_areas: string[];
     cue_map: Record<string, Live2dCueBinding>;
     semantic_cue_map: Record<string, string>;
 }
@@ -729,8 +758,8 @@ export async function executeAction(name: string, args: Record<string, string>, 
     return invoke<ActionResult>("execute_action", { name, args, characterId });
 }
 
-export async function onToolCallResult(callback: (event: ToolCallEvent) => void): Promise<UnlistenFn> {
-    return listen<ToolCallEvent>("chat-tool-result", (event) => callback(event.payload));
+export async function onChatTurnTool(callback: (event: ChatTurnToolEvent) => void): Promise<UnlistenFn> {
+    return listen<ChatTurnToolEvent>("chat-turn-tool", (event) => callback(event.payload));
 }
 
 export async function getToolSettings(): Promise<ToolSettings> {

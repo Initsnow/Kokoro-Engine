@@ -43,6 +43,8 @@ const INTERACTION_AREAS = [
     { value: "*" },
 ] as const;
 
+const PRESET_INTERACTION_AREA_VALUES = INTERACTION_AREAS.map((area) => area.value);
+
 const SEMANTIC_KEYS = [
     { value: "emotion:ecstatic" },
     { value: "emotion:very_happy" },
@@ -79,7 +81,11 @@ export default function ModelTab({
 }: ModelTabProps) {
     const { t } = useTranslation();
     const interactionGestureLabel = (value: string) => t(`settings.model.mapping.gestures.${value === "*" ? "any" : value}`);
-    const interactionAreaLabel = (value: string) => t(`settings.model.mapping.areas.${value === "*" ? "any" : value}`);
+    const interactionAreaLabel = (value: string) => {
+        const key = value === "*" ? "any" : value;
+        const translated = t(`settings.model.mapping.areas.${key}`);
+        return translated === `settings.model.mapping.areas.${key}` ? value : translated;
+    };
     const semanticKeyLabel = (value: string) => t(`settings.model.mapping.semantic_keys.${value.replace(":", ".")}`);
     const [isImporting, setIsImporting] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
@@ -96,7 +102,7 @@ export default function ModelTab({
     const [draftMotionGroup, setDraftMotionGroup] = useState("");
     const [excludedPromptCue, setExcludedPromptCue] = useState("");
     const [interactionGesture, setInteractionGesture] = useState<(typeof INTERACTION_GESTURES)[number]["value"]>("tap");
-    const [interactionArea, setInteractionArea] = useState<(typeof INTERACTION_AREAS)[number]["value"]>("face");
+    const [interactionArea, setInteractionArea] = useState("face");
     const [interactionCue, setInteractionCue] = useState("");
     const [semanticKey, setSemanticKey] = useState<(typeof SEMANTIC_KEYS)[number]["value"]>("emotion:ecstatic");
     const [semanticCue, setSemanticCue] = useState("");
@@ -337,7 +343,7 @@ export default function ModelTab({
     const handleEditInteractionMapping = (key: string, cue: string) => {
         const { gesture, area } = parseInteractionSemanticKey(key);
         setInteractionGesture((INTERACTION_GESTURES.some((item) => item.value === gesture) ? gesture : "tap") as (typeof INTERACTION_GESTURES)[number]["value"]);
-        setInteractionArea((INTERACTION_AREAS.some((item) => item.value === area) ? area : "face") as (typeof INTERACTION_AREAS)[number]["value"]);
+        setInteractionArea(area);
         setInteractionCue(cue);
     };
 
@@ -417,6 +423,12 @@ export default function ModelTab({
     const availableCueNames = modelProfile
         ? Object.keys(modelProfile.cue_map).sort((a, b) => a.localeCompare(b))
         : [];
+    const interactionAreaOptions = Array.from(new Set([
+        ...PRESET_INTERACTION_AREA_VALUES,
+        ...(modelProfile?.available_hit_areas ?? []).map((area) => area.toLowerCase()),
+        interactionArea,
+        ...interactionEntries.map(([key]) => parseInteractionSemanticKey(key).area.toLowerCase()),
+    ]));
     const excludedPromptCueNames = modelProfile
         ? Object.entries(modelProfile.cue_map)
             .filter(([, binding]) => binding.exclude_from_prompt)
@@ -923,11 +935,11 @@ export default function ModelTab({
                                 </select>
                                 <select
                                     value={interactionArea}
-                                    onChange={(e) => setInteractionArea(e.target.value as (typeof INTERACTION_AREAS)[number]["value"])}
+                                    onChange={(e) => setInteractionArea(e.target.value)}
                                     className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface-soft)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none"
                                 >
-                                    {INTERACTION_AREAS.map((area) => (
-                                        <option key={area.value} value={area.value}>{interactionAreaLabel(area.value)}</option>
+                                    {interactionAreaOptions.map((area) => (
+                                        <option key={area} value={area}>{interactionAreaLabel(area)}</option>
                                     ))}
                                 </select>
                                 <select

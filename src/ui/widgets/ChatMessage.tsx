@@ -114,7 +114,9 @@ export const ChatMessage = memo(function ChatMessage({
                 </div>
             ) : (
                 <>
-                    {msg.text}
+                    <div className="whitespace-pre-wrap break-words">
+                        {msg.text}
+                    </div>
 
                     {/* 错误消息的重试按钮 */}
                     {!isStreaming && msg.isError && (
@@ -184,7 +186,7 @@ export const ChatMessage = memo(function ChatMessage({
                                 transition={{ duration: 0.2 }}
                                 className="overflow-hidden"
                             >
-                                <div className="mt-1.5 pt-1.5 border-t border-slate-700/40 text-xs text-[var(--color-text-muted)] leading-relaxed">
+                                <div className="mt-1.5 pt-1.5 border-t border-slate-700/40 text-xs text-[var(--color-text-muted)] leading-relaxed whitespace-pre-wrap break-words">
                                     {msg.translation}
                                 </div>
                             </motion.div>
@@ -220,7 +222,7 @@ export const ChatMessage = memo(function ChatMessage({
                                     {msg.tools.map((tool, idx) => (
                                         <div
                                             key={`${tool.text}-${idx}`}
-                                            className={clsx(tool.isError && "text-red-300")}
+                                            className={clsx("whitespace-pre-wrap break-words", tool.isError && "text-red-300")}
                                         >
                                             {tool.text}
                                         </div>

@@ -530,6 +530,13 @@ pub async fn stream_chat(
         .map(|m| history_message_to_chat_message(&m.role, m.content, m.metadata.as_ref()))
         .collect::<Result<Vec<_>, _>>()?;
     let assistant_turn_id = uuid::Uuid::new_v4().to_string();
+    app.emit(
+        "chat-turn-start",
+        serde_json::json!({
+            "turn_id": assistant_turn_id,
+        }),
+    )
+    .map_err(|e| e.to_string())?;
 
     // 注入视觉上下文（如果有最近的屏幕观察）
     if let Some(vision_desc) = _vision_watcher.context.get_context_string().await {
@@ -613,6 +620,7 @@ pub async fn stream_chat(
     let mut cue_set_by_tool = false;
     let mut draft_row_id: Option<i64> = None;
     let mut forced_text_after_side_effect = false;
+    let mut stream_failed = false;
 
     for round in 0..max_tool_rounds {
         println!("[Chat] Tool loop round {}", round + 1);
@@ -639,7 +647,13 @@ pub async fn stream_chat(
                                 let to_emit = emit_buffer[..safe].to_string();
                                 emit_buffer = emit_buffer[safe..].to_string();
                                 app
-                                    .emit("chat-delta", &to_emit)
+                                    .emit(
+                                        "chat-turn-delta",
+                                        serde_json::json!({
+                                            "turn_id": assistant_turn_id,
+                                            "delta": to_emit,
+                                        }),
+                                    )
                                     .map_err(|e| e.to_string())?;
                             }
                         }
@@ -654,7 +668,8 @@ pub async fn stream_chat(
                 }
                 Err(e) => {
                     if round_response.is_empty() && emit_buffer.is_empty() {
-                        app.emit("chat-error", e).map_err(|e| KokoroError::Chat(e.to_string()))?;
+                        stream_failed = true;
+                        app.emit("chat-error", e).map_err(|e| e.to_string())?;
                     } else {
                         eprintln!(
                             "[Chat] Ignoring trailing stream error after partial response: {}",
@@ -672,8 +687,14 @@ pub async fn stream_chat(
             let cleaned_remainder = strip_translate_tags(&cleaned_remainder);
             if !cleaned_remainder.is_empty() {
                 app
-                    .emit("chat-delta", &cleaned_remainder)
-                    .map_err(|e| KokoroError::Chat(e.to_string()))?;
+                    .emit(
+                        "chat-turn-delta",
+                        serde_json::json!({
+                            "turn_id": assistant_turn_id,
+                            "delta": cleaned_remainder,
+                        }),
+                    )
+                    .map_err(|e| e.to_string())?;
             }
         }
 
@@ -750,8 +771,9 @@ pub async fn stream_chat(
                 let message = format!("Tool '{}' is disabled", tc.name);
                 eprintln!("[ToolCall] {}", message);
                 let _ = app.emit(
-                    "chat-tool-result",
+                    "chat-turn-tool",
                     serde_json::json!({
+                        "turn_id": assistant_turn_id,
                         "tool": tc.name,
                         "error": message,
                     }),
@@ -778,8 +800,9 @@ pub async fn stream_chat(
                 Ok(result) => {
                     println!("[ToolCall] {} => {}", tc.name, result.message);
                     let _ = app.emit(
-                        "chat-tool-result",
+                        "chat-turn-tool",
                         serde_json::json!({
+                            "turn_id": assistant_turn_id,
                             "tool": tc.name,
                             "result": result,
                         }),
@@ -800,8 +823,9 @@ pub async fn stream_chat(
                 Err(e) => {
                     eprintln!("[ToolCall] {} failed: {}", tc.name, e.0);
                     let _ = app.emit(
-                        "chat-tool-result",
+                        "chat-turn-tool",
                         serde_json::json!({
+                            "turn_id": assistant_turn_id,
                             "tool": tc.name,
                             "error": e.0,
                         }),
@@ -1005,7 +1029,13 @@ pub async fn stream_chat(
     // Emit combined translation from all rounds
     if !all_translations.is_empty() {
         let combined_translation = all_translations.join(" ");
-        let _ = app.emit("chat-translation", &combined_translation);
+        let _ = app.emit(
+            "chat-turn-translation",
+            serde_json::json!({
+                "turn_id": assistant_turn_id,
+                "translation": combined_translation,
+            }),
+        );
     }
 
     // Update character emotion from the final assistant response, not from the user input.
@@ -1184,10 +1214,16 @@ pub async fn stream_chat(
         });
     }
 
+    let finish_status = if stream_failed && full_response.is_empty() {
+        "error"
+    } else {
+        "completed"
+    };
     app.emit(
-        "chat-done",
+        "chat-turn-finish",
         serde_json::json!({
-            "text": full_response,
+            "turn_id": assistant_turn_id,
+            "status": finish_status,
         }),
     )
     .map_err(|e| e.to_string())?;

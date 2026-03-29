@@ -76,8 +76,8 @@ import {
   onModUiMessage,
   onModScriptEvent,
   onModUnload,
-  onChatDelta,
-  onChatDone,
+  onChatTurnDelta,
+  onChatTurnFinish,
   onChatCue,
   streamChat,
   dispatchModEvent,
@@ -439,13 +439,13 @@ function App() {
     });
 
     // ── MOD System: Engine event bridge → broadcast to iframes + forward to QuickJS ──
-    const unlistenModChatDelta = onChatDelta((delta) => {
+    const unlistenModChatDelta = onChatTurnDelta(({ turn_id, delta }) => {
       modMessageBus.broadcast({
         type: 'event',
-        payload: { name: 'chat-delta', delta },
+        payload: { name: 'chat-delta', delta, turn_id },
       });
       // Forward to QuickJS scripts so Kokoro.on('chat', ...) works
-      dispatchModEvent('chat', { delta }).catch(() => { });
+      dispatchModEvent('chat', { delta, turn_id }).catch(() => { });
     });
 
     const unlistenModCue = onChatCue((data) => {
@@ -456,12 +456,12 @@ function App() {
       dispatchModEvent('cue', data).catch(() => { });
     });
 
-    const unlistenModChatDone = onChatDone(() => {
+    const unlistenModChatDone = onChatTurnFinish(({ turn_id, status }) => {
       modMessageBus.broadcast({
         type: 'event',
-        payload: { name: 'chat-done' },
+        payload: { name: 'chat-done', turn_id, status },
       });
-      dispatchModEvent('chat-done', {}).catch(() => { });
+      dispatchModEvent('chat-done', { turn_id, status }).catch(() => { });
     });
 
     // ── MOD System: Script events → broadcast to iframes ──

@@ -37,6 +37,8 @@ pub struct Live2dModelProfile {
     #[serde(default)]
     pub available_motion_groups: HashMap<String, usize>,
     #[serde(default)]
+    pub available_hit_areas: Vec<String>,
+    #[serde(default)]
     pub cue_map: HashMap<String, Live2dCueBinding>,
     #[serde(default)]
     pub semantic_cue_map: HashMap<String, String>,
@@ -419,6 +421,7 @@ pub async fn save_live2d_model_profile(
         model_path: discovered.model_path,
         available_expressions: discovered.available_expressions,
         available_motion_groups: discovered.available_motion_groups,
+        available_hit_areas: discovered.available_hit_areas,
         cue_map: profile.cue_map,
         semantic_cue_map: normalize_semantic_map(profile.semantic_cue_map),
     };
@@ -469,6 +472,7 @@ fn ensure_profile_for_model(
             model_path: discovered.model_path.clone(),
             available_expressions: discovered.available_expressions.clone(),
             available_motion_groups: discovered.available_motion_groups.clone(),
+            available_hit_areas: discovered.available_hit_areas.clone(),
             cue_map: saved.cue_map,
             semantic_cue_map: normalize_semantic_map(saved.semantic_cue_map),
         },
@@ -525,11 +529,26 @@ fn discover_model_profile(
         })
         .unwrap_or_default();
 
+    let available_hit_areas = json
+        .get("HitAreas")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|value| value.get("Name").and_then(Value::as_str))
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
     Ok(Live2dModelProfile {
         version: 3,
         model_path: normalized,
         available_expressions,
         available_motion_groups,
+        available_hit_areas,
         cue_map: HashMap::new(),
         semantic_cue_map: HashMap::new(),
     })
@@ -622,6 +641,10 @@ fn builtin_haru_profile() -> Live2dModelProfile {
             ("Idle".to_string(), 3usize),
             ("Tap".to_string(), 2usize),
         ]),
+        available_hit_areas: vec![
+            "Head".to_string(),
+            "Body".to_string(),
+        ],
         cue_map: HashMap::from([
             (
                 "惊讶".to_string(),

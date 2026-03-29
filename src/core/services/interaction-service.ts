@@ -6,7 +6,7 @@
  *
  */
 import type { CueName } from "../../features/live2d/Live2DController";
-import { streamChat, onChatDone } from "../../lib/kokoro-bridge";
+import { streamChat, onChatTurnFinish } from "../../lib/kokoro-bridge";
 import { emit } from "@tauri-apps/api/event";
 
 // ── Types ──────────────────────────────────────────
@@ -66,8 +66,8 @@ export class InteractionService {
     private unlistenChatDone: (() => void) | null = null;
 
     constructor() {
-        // Listen for chat-done to know when LLM finishes responding
-        onChatDone(() => {
+        // Listen for turn-finish to know when LLM finishes responding
+        onChatTurnFinish(() => {
             this.isChatBusy = false;
             this.processPendingGesture();
         }).then(fn => { this.unlistenChatDone = fn; });

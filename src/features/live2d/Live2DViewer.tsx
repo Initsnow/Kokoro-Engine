@@ -343,20 +343,27 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                     let longPressFired = false;
 
                     const hitTestFirst = (globalX: number, globalY: number): string | null => {
-                        // Level 1: Drawable mesh hit test — front-most visible mesh wins.
-                        // null = nothing hit; "unknown" = hit an unrecognised mesh (still on model).
-                        const region = drawableHitTest(model, globalX, globalY, import.meta.env.DEV);
-                        if (region !== null) {
-                            return region === "unknown"
-                                ? REGION_DESCRIPTIONS["body"]
-                                : REGION_DESCRIPTIONS[region];
+                        // Level 1: Prefer model-defined HitAreas when available.
+                        const hits = model.hitTest(globalX, globalY);
+                        if (hits.length > 0) {
+                            if (import.meta.env.DEV) {
+                                console.log(`[HitTest] source=hitarea | hits=${hits.join(", ")}`);
+                            }
+                            return hits[0];
                         }
 
-                        // Level 2: Original HitArea detection (for models that define them)
-                        const hits = model.hitTest(globalX, globalY);
-                        if (hits.length > 0) return hits[0];
+                        // Level 2: Drawable mesh hit test — front-most visible mesh wins.
+                        // null = nothing hit; "unknown" = hit an unrecognised mesh (still on model).
+                        const region = drawableHitTest(model, globalX, globalY, import.meta.env.DEV);
+                        if (region !== null && region !== "unknown") {
+                            if (import.meta.env.DEV) {
+                                console.log(`[HitTest] source=drawable | region=${region}`);
+                            }
+                            return REGION_DESCRIPTIONS[region];
+                        }
 
-                        // Level 3: Y-coordinate estimation — only inside model bounds
+                        // Level 3: Y-coordinate estimation — only inside model bounds.
+                        // This is also the fallback for drawable="unknown" hits.
                         const bounds = model.getBounds();
                         const inBounds =
                             globalX >= bounds.x && globalX <= bounds.x + bounds.width &&
@@ -364,6 +371,10 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(
                         if (!inBounds) return null;
 
                         const fallback = estimateRegionByY(model, globalY);
+                        if (import.meta.env.DEV) {
+                            const source = region === "unknown" ? "drawable-unknown" : "geometry-fallback";
+                            console.log(`[HitTest] source=${source} | region=${fallback}`);
+                        }
                         return REGION_DESCRIPTIONS[fallback];
                     };
 
