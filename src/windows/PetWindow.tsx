@@ -9,7 +9,7 @@ import { usePetChat } from "../features/pet/usePetChat";
 import type { Live2DViewerHandle } from "../features/live2d/Live2DViewer";
 import "../ui/i18n";
 import { live2dUrl } from "../lib/utils";
-import { BUILTIN_LIVE2D_MODEL_PATH } from "../lib/kokoro-bridge";
+import { BUILTIN_LIVE2D_MODEL_PATH, setActiveLive2dModel } from "../lib/kokoro-bridge";
 
 type ResizeDirection = "East" | "North" | "NorthEast" | "NorthWest" | "South" | "SouthEast" | "SouthWest" | "West";
 
@@ -64,6 +64,12 @@ export default function PetWindow() {
             unlisten.then(fn => fn()).catch(console.error);
         };
     }, []);
+
+    useEffect(() => {
+        setActiveLive2dModel(modelPath).catch((error) => {
+            console.error("[PetWindow] Failed to sync active Live2D model:", error);
+        });
+    }, [modelPath]);
     const [isDragMode, setIsDragMode] = useState(false);
     const [isResizeMode, setIsResizeMode] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number }>({

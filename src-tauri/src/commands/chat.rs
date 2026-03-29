@@ -625,9 +625,18 @@ pub async fn stream_chat(
     for round in 0..max_tool_rounds {
         println!("[Chat] Tool loop round {}", round + 1);
 
-        let mut stream = chat_provider
-            .chat_stream_with_tools(client_messages.clone(), None, native_tools.clone())
-            .await?;
+        let mut stream: std::pin::Pin<
+            Box<dyn futures::Stream<Item = Result<LlmStreamEvent, String>> + Send>,
+        > = if native_tools_enabled {
+            chat_provider
+                .chat_stream_with_tools(client_messages.clone(), None, native_tools.clone())
+                .await?
+        } else {
+            let text_stream = chat_provider
+                .chat_stream(client_messages.clone(), None)
+                .await?;
+            Box::pin(text_stream.map(|item| item.map(LlmStreamEvent::Text)))
+        };
 
         let mut round_response = String::new();
         let mut emit_buffer = String::new();
