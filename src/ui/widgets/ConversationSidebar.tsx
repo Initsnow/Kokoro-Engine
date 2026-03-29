@@ -3,77 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import { Plus, Trash2, History, X, Check, Pencil } from "lucide-react";
 import { listConversations, loadConversation, deleteConversation, createConversation, renameConversation } from "../../lib/kokoro-bridge";
-import type { Conversation, ConversationMessage } from "../../lib/kokoro-bridge";
+import type { Conversation } from "../../lib/kokoro-bridge";
 import { useTranslation } from "react-i18next";
+import { buildChatMessagesFromConversation } from "./chat-history";
 
-interface ChatMessage {
-    role: "user" | "kokoro";
-    text: string;
-    images?: string[];
-    translation?: string;
-    tools?: { text: string; isError?: boolean }[];
-}
-
-function buildChatMessagesFromConversation(msgs: ConversationMessage[]): ChatMessage[] {
-    const chatMsgs: ChatMessage[] = [];
-    const turnToAssistantIndex = new Map<string, number>();
-
-    for (const m of msgs) {
-        let meta: Record<string, unknown> | null = null;
-        if (m.metadata) {
-            try {
-                meta = JSON.parse(m.metadata) as Record<string, unknown>;
-            } catch {
-                meta = null;
-            }
-        }
-
-        const technicalType = typeof meta?.type === "string" ? meta.type : undefined;
-        const turnId = typeof meta?.turn_id === "string" ? meta.turn_id : undefined;
-
-        if (m.role === "tool" || technicalType === "tool_result") {
-            const toolName = typeof meta?.tool_name === "string" ? meta.tool_name : "tool";
-            const toolEntry = { text: `${toolName}: ${m.content}`, isError: m.content.startsWith("Error:") };
-            const targetIndex = turnId ? turnToAssistantIndex.get(turnId) : undefined;
-
-            if (targetIndex !== undefined) {
-                const target = chatMsgs[targetIndex];
-                chatMsgs[targetIndex] = {
-                    ...target,
-                    tools: [...(target.tools || []), toolEntry],
-                };
-            }
-            continue;
-        }
-
-        if (m.role !== "user") {
-            let translation: string | undefined;
-            if (typeof meta?.translation === "string") {
-                translation = meta.translation;
-            }
-            if (!translation) {
-                const translateMatch = m.content.match(/\[TRANSLATE:\s*([\s\S]*?)\]/i);
-                if (translateMatch) translation = translateMatch[1].trim();
-            }
-            const text = m.content
-                .replace(/\[ACTION:\w+\]\s*/g, "")
-                .replace(/\[TOOL_CALL:[^\]]*\]\s*/g, "")
-                .replace(/\[EMOTION:[^\]]*\]/g, "")
-                .replace(/\[IMAGE_PROMPT:[^\]]*\]/g, "")
-                .replace(/\[TRANSLATE:[\s\S]*?\]/gi, "")
-                .trim();
-            chatMsgs.push({ role: "kokoro", text, translation });
-            if (turnId) {
-                turnToAssistantIndex.set(turnId, chatMsgs.length - 1);
-            }
-            continue;
-        }
-
-        chatMsgs.push({ role: "user", text: m.content });
-    }
-
-    return chatMsgs;
-}
+type ChatMessage = ReturnType<typeof buildChatMessagesFromConversation>[number];
 
 interface ConversationSidebarProps {
     open: boolean;
@@ -114,7 +48,7 @@ export default function ConversationSidebar({ open, onClose, onLoadMessages }: C
     const handleLoad = async (id: string) => {
         if (id === activeId) return;
         try {
-            const msgs: ConversationMessage[] = await loadConversation(id);
+            const msgs = await loadConversation(id);
             const chatMsgs: ChatMessage[] = buildChatMessagesFromConversation(msgs);
             setActiveId(id);
             onLoadMessages(chatMsgs);

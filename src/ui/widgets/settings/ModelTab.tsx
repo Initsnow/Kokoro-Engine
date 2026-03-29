@@ -104,8 +104,10 @@ export default function ModelTab({
     const [interactionGesture, setInteractionGesture] = useState<(typeof INTERACTION_GESTURES)[number]["value"]>("tap");
     const [interactionArea, setInteractionArea] = useState("face");
     const [interactionCue, setInteractionCue] = useState("");
+    const [editingInteractionKey, setEditingInteractionKey] = useState<string | null>(null);
     const [semanticKey, setSemanticKey] = useState<(typeof SEMANTIC_KEYS)[number]["value"]>("emotion:ecstatic");
     const [semanticCue, setSemanticCue] = useState("");
+    const [editingSemanticKey, setEditingSemanticKey] = useState<string | null>(null);
     const effectiveModelPath = customModelPath ?? BUILTIN_LIVE2D_MODEL_PATH;
 
     // Fetch available models on mount
@@ -242,12 +244,14 @@ export default function ModelTab({
     };
 
     const resetInteractionDraft = () => {
+        setEditingInteractionKey(null);
         setInteractionGesture("tap");
         setInteractionArea("face");
         setInteractionCue("");
     };
 
     const resetSemanticDraft = () => {
+        setEditingSemanticKey(null);
         setSemanticKey("emotion:ecstatic");
         setSemanticCue("");
     };
@@ -333,14 +337,16 @@ export default function ModelTab({
         if (!cue) return;
 
         const key = buildInteractionSemanticKey(interactionGesture, interactionArea);
-        await persistSemanticMap({
-            ...modelProfile.semantic_cue_map,
-            [key]: cue,
-        });
+        const nextMap = { ...modelProfile.semantic_cue_map, [key]: cue };
+        if (editingInteractionKey && editingInteractionKey !== key) {
+            delete nextMap[editingInteractionKey];
+        }
+        await persistSemanticMap(nextMap);
         resetInteractionDraft();
     };
 
     const handleEditInteractionMapping = (key: string, cue: string) => {
+        setEditingInteractionKey(key);
         const { gesture, area } = parseInteractionSemanticKey(key);
         setInteractionGesture((INTERACTION_GESTURES.some((item) => item.value === gesture) ? gesture : "tap") as (typeof INTERACTION_GESTURES)[number]["value"]);
         setInteractionArea(area);
@@ -371,14 +377,16 @@ export default function ModelTab({
         if (!modelProfile) return;
         const cue = semanticCue.trim();
         if (!cue) return;
-        await persistSemanticMap({
-            ...modelProfile.semantic_cue_map,
-            [semanticKey]: cue,
-        });
+        const nextMap = { ...modelProfile.semantic_cue_map, [semanticKey]: cue };
+        if (editingSemanticKey && editingSemanticKey !== semanticKey) {
+            delete nextMap[editingSemanticKey];
+        }
+        await persistSemanticMap(nextMap);
         resetSemanticDraft();
     };
 
     const handleEditSemanticMapping = (key: string, cue: string) => {
+        setEditingSemanticKey(key);
         setSemanticKey((SEMANTIC_KEYS.some((item) => item.value === key) ? key : "emotion:ecstatic") as (typeof SEMANTIC_KEYS)[number]["value"]);
         setSemanticCue(cue);
     };
