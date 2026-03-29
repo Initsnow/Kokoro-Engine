@@ -12,6 +12,7 @@ export function buildChatMessagesFromConversation(msgs: ConversationMessage[]): 
     const chatMsgs: ChatHistoryMessage[] = [];
     const turnToAssistantIndex = new Map<string, number>();
     const pendingToolsByTurn = new Map<string, { text: string; isError?: boolean }[]>();
+    const pendingTurnOrder: string[] = [];
 
     for (const m of msgs) {
         let meta: Record<string, unknown> | null = null;
@@ -41,6 +42,9 @@ export function buildChatMessagesFromConversation(msgs: ConversationMessage[]): 
                     tools: [...(target.tools || []), toolEntry],
                 };
             } else if (turnId) {
+                if (!pendingToolsByTurn.has(turnId)) {
+                    pendingTurnOrder.push(turnId);
+                }
                 pendingToolsByTurn.set(turnId, [
                     ...(pendingToolsByTurn.get(turnId) || []),
                     toolEntry,
@@ -88,6 +92,16 @@ export function buildChatMessagesFromConversation(msgs: ConversationMessage[]): 
         }
 
         chatMsgs.push({ role: "user", text: m.content });
+    }
+
+    for (const turnId of pendingTurnOrder) {
+        const tools = pendingToolsByTurn.get(turnId);
+        if (!tools || tools.length === 0) continue;
+        chatMsgs.push({
+            role: "kokoro",
+            text: "",
+            tools,
+        });
     }
 
     return chatMsgs;
