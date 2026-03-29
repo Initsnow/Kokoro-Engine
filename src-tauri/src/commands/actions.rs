@@ -1,5 +1,6 @@
 use crate::actions::tool_settings::ToolSettings;
 use crate::actions::{ActionContext, ActionInfo, ActionRegistry, ActionResult};
+use crate::error::KokoroError;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{command, AppHandle, State};
@@ -29,10 +30,10 @@ pub async fn execute_action(
     name: String,
     args: HashMap<String, String>,
     character_id: Option<String>,
-) -> Result<ActionResult, String> {
+ ) -> Result<ActionResult, KokoroError> {
     let tool_settings = tool_settings_state.read().await;
     if !tool_settings.is_enabled(&name) {
-        return Err(format!("Tool '{}' is disabled", name));
+        return Err(KokoroError::Validation(format!("Tool '{}' is disabled", name)));
     }
     drop(tool_settings);
     let registry = registry_state.read().await;

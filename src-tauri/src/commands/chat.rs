@@ -528,7 +528,8 @@ pub async fn stream_chat(
     let mut client_messages = prompt_messages
         .into_iter()
         .map(|m| history_message_to_chat_message(&m.role, m.content, m.metadata.as_ref()))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(KokoroError::Chat)?;
     let assistant_turn_id = uuid::Uuid::new_v4().to_string();
     app.emit(
         "chat-turn-start",
@@ -536,7 +537,7 @@ pub async fn stream_chat(
             "turn_id": assistant_turn_id,
         }),
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| KokoroError::Chat(e.to_string()))?;
 
     // 注入视觉上下文（如果有最近的屏幕观察）
     if let Some(vision_desc) = _vision_watcher.context.get_context_string().await {
@@ -586,7 +587,8 @@ pub async fn stream_chat(
                 }
 
                 // Create multimodal content
-                replace_user_message_with_images(last_user_msg, text_content, processed_images)?;
+                replace_user_message_with_images(last_user_msg, text_content, processed_images)
+                    .map_err(KokoroError::Chat)?;
                 println!("[Chat] Attached {} images to user message", images.len());
             }
         }
@@ -630,11 +632,13 @@ pub async fn stream_chat(
         > = if native_tools_enabled {
             chat_provider
                 .chat_stream_with_tools(client_messages.clone(), None, native_tools.clone())
-                .await?
+                .await
+                .map_err(KokoroError::Chat)?
         } else {
             let text_stream = chat_provider
                 .chat_stream(client_messages.clone(), None)
-                .await?;
+                .await
+                .map_err(KokoroError::Chat)?;
             Box::pin(text_stream.map(|item| item.map(LlmStreamEvent::Text)))
         };
 
@@ -663,7 +667,7 @@ pub async fn stream_chat(
                                             "delta": to_emit,
                                         }),
                                     )
-                                    .map_err(|e| e.to_string())?;
+                                    .map_err(|e| KokoroError::Chat(e.to_string()))?;
                             }
                         }
                         LlmStreamEvent::ToolCall(tool_call) => {
@@ -678,7 +682,7 @@ pub async fn stream_chat(
                 Err(e) => {
                     if round_response.is_empty() && emit_buffer.is_empty() {
                         stream_failed = true;
-                        app.emit("chat-error", e).map_err(|e| e.to_string())?;
+                        app.emit("chat-error", e).map_err(|e| KokoroError::Chat(e.to_string()))?;
                     } else {
                         eprintln!(
                             "[Chat] Ignoring trailing stream error after partial response: {}",
@@ -703,7 +707,7 @@ pub async fn stream_chat(
                             "delta": cleaned_remainder,
                         }),
                     )
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| KokoroError::Chat(e.to_string()))?;
             }
         }
 
@@ -1248,7 +1252,7 @@ pub async fn stream_chat(
             "status": finish_status,
         }),
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| KokoroError::Chat(e.to_string()))?;
 
     Ok(())
 }

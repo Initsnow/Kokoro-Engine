@@ -1,4 +1,5 @@
 use crate::ai::context::AIOrchestrator;
+use crate::error::KokoroError;
 use crate::llm::messages::{system_message, user_text_message};
 use crate::llm::provider::{build_openai_client, create_chat};
 use tauri::State;

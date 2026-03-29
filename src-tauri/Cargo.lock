@@ -7000,7 +7000,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-appkokoro-engine"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "anyhow",
  "async-openai",
@@ -7040,6 +7040,7 @@ dependencies = [
  "tauri-plugin-process",
  "teloxide",
  "tempfile",
+ "thiserror 1.0.69",
  "tokenizers 0.21.4",
  "tokio",
  "tokio-test",
